@@ -55,6 +55,15 @@ export function fmtDateTime(iso?: string | null, timeNotListed?: boolean | null)
   return `${dLabel(f)} · ${tLabel(f)} PT`;
 }
 
+// Compact weekday + Pacific time for list rows: "Mon, Nov 9 · 6:30 PM PT",
+// or "Mon, Nov 9 · Time not listed" for date-only events. Reuses the PT helpers.
+export function fmtListDateTime(iso?: string | null, timeNotListed?: boolean | null): string {
+  if (!iso) return "";
+  if (noTime(iso, timeNotListed)) return `${dLabel(dateFields(iso))} · Time not listed`;
+  const f = ptFields(iso);
+  return `${dLabel(f)} · ${tLabel(f)} PT`;
+}
+
 // Start [- end], both Pacific, single "PT". Date-only shows the date (+ range) and "Time not listed".
 export function fmtEventRange(starts?: string | null, ends?: string | null, timeNotListed?: boolean | null): string {
   if (!starts) return "";

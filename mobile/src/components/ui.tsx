@@ -80,7 +80,7 @@ export function Button({
       ) : (
         <View style={styles.btnRow}>
           {icon ? <Icon name={icon} size={18} color={fg}  footprint={18}/> : null}
-          <Text numberOfLines={numberOfLines} style={[styles.btnText, { color: fg, textAlign: "center" }]}>{title}</Text>
+          <Text numberOfLines={numberOfLines} maxFontSizeMultiplier={1.3} style={[styles.btnText, { color: fg, textAlign: "center" }]}>{title}</Text>
         </View>
       )}
     </Pressable>
@@ -420,7 +420,7 @@ export function Picker({ value, options, onChange, testID, title, placeholder = 
       <Pressable testID={testID} accessibilityRole="button" accessibilityLabel={`${title || "Options"}: ${current?.label || placeholder}`}
         onPress={() => setOpen(true)} style={[pickStyles.trigger, { backgroundColor: colors.surface, borderColor: colors.border }, flex ? { flex: 1 } : null]}>
         {icon ? <Icon name={icon} size={15} color={colors.muted} footprint={15} /> : null}
-        <Text numberOfLines={1} style={{ flex: 1, color: current ? colors.onSurface : colors.muted, fontWeight: "700", fontSize: 13.5 }}>{current?.label || placeholder}</Text>
+        <Text numberOfLines={1} adjustsFontSizeToFit maxFontSizeMultiplier={1.2} style={{ flex: 1, color: current ? colors.onSurface : colors.muted, fontWeight: "700", fontSize: 13.5 }}>{current?.label || placeholder}</Text>
         <Icon name="chevron-down" size={15} color={colors.muted} footprint={15} />
       </Pressable>
       <MotionModal visible={open} transparent animationType="fade" onRequestClose={() => setOpen(false)}>

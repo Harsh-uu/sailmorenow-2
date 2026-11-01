@@ -69,7 +69,7 @@ export function MultiSelectPicker({
         onPress={openSheet}
         style={[styles.trigger, { backgroundColor: colors.surface, borderColor: colors.border }]}
       >
-        <Text style={{ flex: 1, fontSize: 14, color: (single ? value.length : draft.length) ? colors.onSurface : colors.muted }} numberOfLines={1}>
+        <Text style={{ flex: 1, fontSize: 14, color: (single ? value.length : draft.length) ? colors.onSurface : colors.muted }} numberOfLines={1} adjustsFontSizeToFit maxFontSizeMultiplier={1.2}>
           {triggerText}
         </Text>
         <Icon name="chevron-down" size={18} color={colors.muted} footprint={18} />

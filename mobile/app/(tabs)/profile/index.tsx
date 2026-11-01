@@ -436,7 +436,7 @@ export default function Profile() {
     ]);
   };
 
-  const inputStyle = { borderWidth: 1, borderColor: colors.border, borderRadius: 10, paddingHorizontal: 12, height: 44, color: colors.onSurface } as const;
+  const inputStyle = { borderWidth: 1, borderColor: colors.border, borderRadius: 10, paddingHorizontal: 12, minHeight: 48, paddingVertical: 10, fontSize: 15, color: colors.onSurface } as const;
 
   return (
     <Screen title="Profile" scroll padded={false} right={<NotificationBell />}>
@@ -461,10 +461,13 @@ export default function Profile() {
             <Badge label={tierBadge} tone={isPaid ? "accent" : "muted"} />
             {user.identity_verified ? <Badge label="Verified" tone="navy" /> : null}
           </View>
-          <View style={{ flexDirection: "row", gap: 10, marginTop: 12 }}>
-            <Button title="Switch account" variant="secondary" icon="swap-horizontal-outline" onPress={switchAccount} testID="switch-account-btn" />
-            <Button title="Log out" variant="danger" icon="log-out-outline" onPress={logout} testID="logout-button" />
-          </View>
+          <ButtonRow
+            style={{ marginTop: 12 }}
+            buttons={[
+              { title: "Switch account", variant: "secondary", icon: "swap-horizontal-outline", onPress: switchAccount, testID: "switch-account-btn" },
+              { title: "Log out", variant: "danger", icon: "log-out-outline", onPress: logout, testID: "logout-button" },
+            ]}
+          />
         </View>
 
         <View style={{ padding: 16, gap: 12 }}>
@@ -590,9 +593,9 @@ export default function Profile() {
                   <Text style={{ color: colors.warning, fontSize: 13, fontWeight: "700", marginTop: 4 }} testID="subscription-canceled-note">Set to cancel at period end</Text>
                 ) : null}
                 <View style={{ gap: 10, marginTop: 12 }}>
-                  <Button title="Change plan" variant="secondary" onPress={() => router.push("/pricing")} testID="subscription-change-btn" />
+                  <Button title="Change plan" variant="secondary" numberOfLines={2} onPress={() => router.push("/pricing")} testID="subscription-change-btn" />
                   {!sub.cancel_at_period_end ? (
-                    <Button title="Cancel subscription" variant="ghost" loading={cancelBusy} onPress={cancelPlan} testID="subscription-cancel-btn" />
+                    <Button title="Cancel subscription" variant="ghost" numberOfLines={2} loading={cancelBusy} onPress={cancelPlan} testID="subscription-cancel-btn" />
                   ) : null}
                 </View>
               </>

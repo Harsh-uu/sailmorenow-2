@@ -17,7 +17,7 @@ import { useMarketPref, setMarketPref, marketParam } from "@/src/lib/marketPref"
 import { FollowingBanner } from "@/src/components/FollowingBanner";
 import { CONTENT_CHANGED } from "@/src/lib/events";
 
-import { ptDayKey, fmtBadge, eventTitleParts } from "@/src/lib/format";
+import { ptDayKey, fmtBadge, fmtListDateTime, eventTitleParts } from "@/src/lib/format";
 
 type EventItem = {
   id: string;
@@ -298,12 +298,15 @@ export default function Events() {
                 style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}
               >
                 <View style={[styles.dateBox, { backgroundColor: colors.brandTertiary }]}>
-                  <Text style={[styles.dMonth, { color: colors.onBrandTertiary }]}>{badge.month}</Text>
-                  <Text style={[styles.dDay, { color: colors.onBrandTertiary }]}>{badge.day}</Text>
+                  <Text style={[styles.dMonth, { color: colors.onBrandTertiary }]} numberOfLines={1} adjustsFontSizeToFit maxFontSizeMultiplier={1.1}>{badge.month}</Text>
+                  <Text style={[styles.dDay, { color: colors.onBrandTertiary }]} numberOfLines={1} adjustsFontSizeToFit maxFontSizeMultiplier={1.2}>{badge.day}</Text>
                 </View>
                 <View style={{ flex: 1 }}>
                   <Text style={[styles.title, { color: colors.onSurface }]} numberOfLines={2}>
                     {tp.title}
+                  </Text>
+                  <Text style={[styles.when, { color: colors.onSurfaceSecondary }]} numberOfLines={1} testID={`event-when-${item.id}`}>
+                    {fmtListDateTime(item.starts_at, item.time_not_listed)}
                   </Text>
                   <View style={styles.metaRow}>
                     <Icon name="location-outline" size={13} color={colors.muted}  footprint={13}/>
@@ -335,10 +338,11 @@ const styles = StyleSheet.create({
   header: { height: 52, flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 16 },
   hTitle: { fontSize: 20, fontWeight: "800", letterSpacing: -0.3, flexShrink: 1 },
   card: { borderRadius: 18, borderWidth: 1, padding: 14, marginBottom: 12, flexDirection: "row", alignItems: "center", gap: 12 },
-  dateBox: { width: 52, height: 56, borderRadius: 12, alignItems: "center", justifyContent: "center" },
-  dMonth: { fontSize: 12, fontWeight: "800", letterSpacing: 0.5 },
+  dateBox: { width: 52, height: 56, borderRadius: 12, alignItems: "center", justifyContent: "center", paddingHorizontal: 4 },
+  dMonth: { fontSize: 12, fontWeight: "800", letterSpacing: 0.3 },
   dDay: { fontSize: 22, fontWeight: "800" },
   title: { fontSize: 16, fontWeight: "700", letterSpacing: -0.2 },
+  when: { fontSize: 12.5, fontWeight: "600", marginTop: 3 },
   metaRow: { flexDirection: "row", alignItems: "center", gap: 4, marginTop: 4 },
   meta: { fontSize: 12.5 },
   badges: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 8, flexWrap: "wrap" },

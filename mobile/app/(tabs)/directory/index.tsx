@@ -102,11 +102,11 @@ export default function Directory() {
     <View style={{ flex: 1, backgroundColor: colors.surfaceSecondary }}>
       <SafeAreaView edges={["top"]} style={{ backgroundColor: colors.brandPrimary }}>
         <View style={styles.header}>
-          <Text style={[styles.hTitle, { color: colors.onBrandPrimary }]} numberOfLines={1}>Boat Pros</Text>
-          <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+          <Text style={[styles.hTitle, { color: colors.onBrandPrimary }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7} maxFontSizeMultiplier={1.3}>Boat Pros</Text>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 6, flexShrink: 0 }}>
             <Pressable testID="directory-clubs-link" onPress={() => router.push("/directory/clubs" as any)} style={styles.clubsLink} accessibilityRole="button" accessibilityLabel="Clubs and Orgs">
               <Icon name="org" size={15} color={colors.onBrandPrimary} footprint={15} />
-              <Text style={{ color: colors.onBrandPrimary, fontWeight: "700", fontSize: 13 }}>Clubs & Orgs</Text>
+              <Text style={{ color: colors.onBrandPrimary, fontWeight: "700", fontSize: 13 }} numberOfLines={1} maxFontSizeMultiplier={1.2}>Clubs & Orgs</Text>
               <Icon name="chevron-forward" size={14} color={colors.onBrandPrimary} footprint={14} />
             </Pressable>
             <NotificationBell />

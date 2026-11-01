@@ -60,13 +60,18 @@ export default function TabsLayout() {
           paddingTop: 6,
           paddingBottom: insets.bottom,
         },
-        // Single line, readable size, capped font scaling so a large system
-        // font (or the long "Pros/Orgs" label) can never grow out of its slot.
+        // Give each label the full slot width (no item padding) so all five fit.
+        tabBarItemStyle: { paddingHorizontal: 0 },
+        // One line, no shortening: cap system font scaling AND auto-shrink to fit
+        // so even at Android "Display size: Large" the long labels ("Pros/Orgs",
+        // "Messages") stay on one line inside their slot.
         tabBarLabel: ({ color, children }) => (
           <Text
             numberOfLines={1}
-            maxFontSizeMultiplier={1.2}
-            style={{ fontSize: 11, lineHeight: 14, fontWeight: "600", color, textAlign: "center", width: "100%", paddingHorizontal: 2 }}
+            adjustsFontSizeToFit
+            minimumFontScale={0.7}
+            maxFontSizeMultiplier={1.15}
+            style={{ fontSize: 11, lineHeight: 14, fontWeight: "600", color, textAlign: "center", width: "100%", paddingHorizontal: 1 }}
           >
             {children}
           </Text>
@@ -120,6 +125,13 @@ export default function TabsLayout() {
       />
     </Tabs>
       </View>
+      {/* Paint the Android system-nav (3-button / gesture) strip with the tab
+          bar's own surface colour so the deep-navy app background never shows
+          through behind the buttons. Sits below the tab bar content, so labels
+          are unaffected. */}
+      {insets.bottom > 0 ? (
+        <View pointerEvents="none" style={{ position: "absolute", left: 0, right: 0, bottom: 0, height: insets.bottom, backgroundColor: colors.surface }} />
+      ) : null}
     </View>
   );
 }
