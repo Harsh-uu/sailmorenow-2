@@ -1,0 +1,60 @@
+{
+  "summary": "Iteration 20 — focused backend retest of the CRITICAL VAPID key-format fix + the 4 action items from iteration_19. Wrote /app/backend/tests/test_iter20.py (15 tests, xdist-safe, RUN_PREFIX TEST_user20_): VAPID key format/loadability, pub/priv key match, Vapid.sign() header generation, API-vs-DB key parity, legacy PKCS8-PEM auto-migration (with backup/restore of the live doc), mocked-webpush fanout count, 410 pruning, notify() fire-and-forget timing, discussions pending sort by created_at desc (+ published sort regression + admin-only guard), seed_alex.identity_verified guard, and TWO fully UNMOCKED end-to-end delivery tests (real pywebpush encryption + VAPID signing against a local HTTP push service in-container, both in-process and through the live POST /api/push/test which now returns {sent: 1}). ALL 15 PASS. The CRITICAL bug from iteration_19 is definitively fixed — proven without mocks. Full regression: 343 passed / 13 skipped / 2 xfailed / 0 failed across all Phase A-H + iter suites (one pre-existing phase-H test needed a wait added because notify() is now fire-and-forget; fixed in-scope). Only remaining defect: /logo-color.png does not exist in /app/frontend/public, so the favicon and the service-worker notification icon/badge 404.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {
+        "endpoint": "push.send_push_to_user",
+        "issue": "Real pywebpush failures that are not WebPushException (e.g. ValueError('Unsupported elliptic curve point type') from a malformed client p256dh) fall into the catch-all and only log '[push] unexpected error'; the subscription is never pruned even though it can never receive a push. Consider pruning on encryption/ValueError for that endpoint too."
+      },
+      {
+        "endpoint": "POST /api/push/subscribe",
+        "issue": "Accepts a subscription with a syntactically invalid p256dh/auth (no key validation), so a dead subscription is stored permanently and every send logs a traceback. Optional: validate keys with base64url-decode + 65-byte uncompressed point check and return 400."
+      },
+      {
+        "endpoint": "POST /api/push/subscribe",
+        "issue": "Pre-existing/known: body {} -> 422 (Pydantic) while {subscription:{keys:{}}} -> 400. Inconsistent but documented in tests."
+      }
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {
+        "component": "public/sw.js + public/index.html",
+        "issue": "NOT FIXED: /logo-color.png does not exist. /app/frontend/public contains only index.html and sw.js; GET <APP_URL>/logo-color.png returns the CRA index.html fallback (content-type text/html, 733 bytes) i.e. a 404-equivalent. So the browser favicon and the pushed-notification icon/badge are both broken. Iteration_19 flagged the same problem for /logo192.png — the path was renamed but the asset was never added.",
+        "selector": "n/a (static asset)",
+        "priority": "MEDIUM"
+      }
+    ],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter20.py",
+    "/app/backend/tests/test_phase_h.py",
+    "/app/test_reports/pytest/iter20.xml",
+    "/app/test_reports/pytest/iter20_all.xml"
+  ],
+  "action_items": [
+    "Add a real /app/frontend/public/logo-color.png (and ideally a 192x192 badge) or remove the icon/badge fields from sw.js and the favicon link from index.html — the referenced asset 404s today.",
+    "Optional hardening: validate p256dh/auth on POST /api/push/subscribe and prune subscriptions whose encryption fails permanently (currently only 404/410 WebPushException prunes)."
+  ],
+  "critical_code_review_comments": [
+    "VERIFIED FIXED: push._mint_keypair now stores b64url(raw 32-byte scalar) (43 chars) and validates with Vapid.from_string before persisting; legacy 'private_pem'/PEM docs are detected and regenerated with $unset of private_pem. Migration path tested explicitly.",
+    "VERIFIED FIXED: notifications.notify() schedules the fanout via asyncio.create_task — measured notify() return at <5ms while a monkeypatched 1s send_push_to_user was still running, and the task was confirmed to actually start (so it is not silently dropped).",
+    "Note: asyncio.create_task tasks are not referenced anywhere, so they can in theory be GC'd mid-flight. Low risk here (short-lived) but keeping a module-level set of pending tasks is the safe pattern.",
+    "VERIFIED FIXED: hub_router.list_discussions sorts on created_at for non-published statuses; verified with scrambled created_at values on 3 pending blogs, and published lists still sort by published_at desc.",
+    "AdminEvents 'All markets' option no longer includes a redundant count; CommunityHub.jsx lints clean (no unused Link/useNavigate, no stale eslint-disable)."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter20.py",
+    "/app/backend/tests/test_phase_h.py"
+  ],
+  "success_rate": {"backend": "100% (15/15 iter20 tests; full suite 343 passed / 13 skipped / 2 xfailed / 0 failed)", "frontend": "not retested this iteration (backend-only request); 1 static-asset defect found by inspection"},
+  "seed_data_creation": "Ephemeral TEST_user20_* users/sessions/discussions/push_subscriptions + a temporary legacy-PEM vapid doc (original db.settings {key:'vapid'} backed up and restored byte-for-byte; verified identical afterwards, exactly 1 doc). All test artifacts torn down (verified 0 leftovers). crew.alex identity_verified confirmed still true.",
+  "should_call_test_agent_after_fix": false,
+  "should_main_agent_self_test": true,
+  "test_credentials": "No passwords — Emergent Google OAuth. Mint mongo sessions per /app/auth_testing.md; admin via platform_role:'admin'.",
+  "context_for_next_testing_agent": "test_iter20.py notes: (1) reuse the inproc_db fixture + _run() helper (other suites close their loops via asyncio.run, so deps.db must not be reused); (2) TestRealDelivery spins a stdlib HTTPServer on 127.0.0.1:0 as a stand-in FCM endpoint — the backend container can reach it, so this is the only way to test push WITHOUT mocks; always prefer it over mocking pywebpush, since mocks hid the iteration-19 CRITICAL bug for a whole cycle; (3) tests that mutate db.settings{key:'vapid'} must back up and restore the doc in a finally block AND clear push._VAPID_CACHE; (4) after the fire-and-forget change, any in-process notify() assertion on push side-effects needs an await asyncio.sleep(>=0.3) to let the task drain — test_phase_h was updated accordingly.",
+  "rca_of_the_issue": "Iteration_19's CRITICAL bug (PKCS8-PEM VAPID private key rejected by py_vapid) is resolved: the persisted key is now a 43-char b64url raw 32-byte P-256 scalar, Vapid.from_string() loads it, Vapid.sign() emits a valid 'vapid t=...,k=...' Authorization header, and an unmocked pywebpush round-trip to a local push service delivers an aes128gcm-encrypted payload and returns sent=1 through POST /api/push/test. The one residual '[push] unexpected error' traceback still seen in backend.err.log is NOT the VAPID bug — it is pywebpush failing to encrypt for a deliberately fake p256dh ('BQ'+'A'*85) used by an older test fixture, i.e. the failure has moved past the VAPID stage."
+}

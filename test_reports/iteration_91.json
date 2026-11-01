@@ -1,0 +1,32 @@
+{
+  "summary": "Iter 91 — Verified sponsor image upload + Clubs/Orgs categorization (web + shared backend). BACKEND: 9/9 pytest PASS (test_iter91_orgcat_sponsor_upload.py). /api/markets.org_categories = ['Yacht clubs','Racing fleets and associations','Nonprofits and youth sailing','Sailing schools and instruction'] exactly ✅. /api/partners (no filter) returns {count, partners[]} with org_category field present on backfilled orgs ✅. /api/partners?category=Yacht%20clubs returns only matching orgs (all with org_category=='Yacht clubs') ✅. Unknown category returns empty list ✅. market=Greater Seattle filter still works (verified every returned partner matches via primary_market or markets[]) ✅. POST /api/admin/sponsors/upload-image: unauthenticated → 403, non-admin → 403, admin (jenn) → 200 with {image_url:'/api/files/sailmorenow/sponsors/<uuid>.png'} ✅. The uploaded image is served by GET /api/files/{path} with correct image/* content-type and non-empty body ✅. Full flow: upload-image → POST /api/admin/sponsors with returned image_url → public GET /api/sponsors includes the created sponsor with the exact image_url and link_url ✅ (test cleans up). WEB UI (/admin/sponsors as jenn): page loads, data-testid=sponsor-upload-input and sponsor-upload-label present. Setting a file on sponsor-upload-input triggered multipart POST, filled sponsor-image-input with '/api/files/sailmorenow/sponsors/...png', rendered the <img> preview; after filling link_url and sponsor-name-input, clicking sponsor-save-btn created the sponsor (sonner 'Sponsor added' toast, admin list card visible). Cleaned up test sponsor via API ✅. WEB UI (/clubs logged-out): clubs-page + clubs-guest-cta visible, org-category-filter row renders org-cat-all + chips for all 4 categories ('Yacht clubs','Racing fleets and associations','Nonprofits and youth sailing','Sailing schools and instruction'), org-cat-chip-* badges on cards. Note: Backfill left all 15 current demo orgs tagged 'Yacht clubs', so filter→Yacht clubs still shows 15 (expected per agent-to-agent note 'mostly Yacht clubs'). Filter requests ARE firing (chip highlights change and backend confirms correct filtering via pytest). No test executed for logged-in Clubs page, but public endpoint is used identically for both and verified via backend tests. Not retested: mobile (out of scope), onboarding org-category picker (deferred).",
+  "platforms_tested": ["web"],
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "web": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+    "mobile": {"ui_bugs": [], "integration_issues": [], "design_issues": [], "react_native_issues": []}
+  },
+  "parity_issues": [],
+  "test_report_links": [
+    "/app/backend/tests/test_iter91_orgcat_sponsor_upload.py",
+    "/app/test_reports/pytest/iter91_results.xml"
+  ],
+  "action_items": [
+    "Optional: backfill a few demo orgs into the other 3 org categories so the Clubs filter has visible diversity on web (currently all 15 are 'Yacht clubs'). Not a bug — filter + chip rendering + backend wiring are all verified via pytest."
+  ],
+  "critical_code_review_comments": [
+    "storage_router.upload_sponsor_image correctly guards with is_admin → 403, reuses ALLOWED types and 15MB cap, and returns a relative /api/files/… URL so both web and mobile fetch via their own backend origin.",
+    "directory_router.list_markets now exposes org_categories alongside markets/categories/reasons — single endpoint keeps the client stateless.",
+    "community_router.list_partners properly adds q['org_category']=category when the query param is present; projection includes org_category so cards can render the chip.",
+    "Clubs.jsx wires the chip filter via useEffect on [market, orgCategory] and uses stable data-testids (org-category-filter, org-cat-all, org-cat-<cat>, org-cat-chip-<user_id>). Good.",
+    "AdminSponsors.jsx keeps the upload isolated to the Upload image label — label uses testid sponsor-upload-label and the hidden input uses sponsor-upload-input per spec. uploading state disables input and the toast feedback is clear."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "100% (9/9)", "frontend": "web PASS (admin sponsors upload + clubs category filter UI)"},
+  "test_credentials": "Admin jenn@sailmorenow.com / [REDACTED] (used for both backend and web E2E).",
+  "seed_data_creation": "Transient: 2 TEST_Iter91 sponsors created and deleted during tests; 1 ephemeral TEST_Iter91 web sponsor created+deleted; 1 ephemeral non-admin user via /api/auth/register (TEST_iter91_user+<hex>@example.com) to verify 403 — not cleaned (standard account, no sponsor data).",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Iter 91 backend regression lives at /app/backend/tests/test_iter91_orgcat_sponsor_upload.py — safe to re-run (self-cleaning). Mobile side-effects of this round were intentionally deferred (mobile profile home-market selector, mobile org-category at signup, web onboarding org-category picker) per request. If main agent lands those, next iteration should cover: web onboarding org_category selector, mobile register org_category for partner accounts, mobile Clubs tab category filter (if added).",
+  "rca of the issue": ""
+}

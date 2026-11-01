@@ -1,0 +1,62 @@
+{
+  "summary": "Focused retest of the three iteration_16 regressions — ALL FIXED. Backend: new /app/backend/tests/test_iter17.py (12 tests) verifying (1) date-only starts_at synthesizes ends_at = next-day midnight (POST returns starts_at=TODAYT00:00:00+00:00 / ends_at=TOMORROWT00:00:00+00:00, verified persisted in mongo) and the event is visible in GET /api/events all day, yesterday's all-day event hidden, explicit ends_at not overwritten; (2) intra-day precision preserved (timed event ended 1h ago hidden, in-progress event visible); (3) predicate parity — GET /api/events (unfiltered) and GET /api/admin/events return the EXACT same id set, past event absent from both, no _id leakage, market-filtered public list consistent with the admin list; (4) migration convergence with SMN_ALLOW_RESTART=1 — a row with ends_at='' logs 'normalized ISO timestamps on 1 legacy events', becomes ends_at=null (BSON null, not ''), is visible via $ifNull fallback to starts_at, and a SECOND restart logs nothing (converged); a legacy date-only row is expanded to ends_at=next-day midnight and is visible today. DB scan: 0 non-canonical timestamps, 0 rows with ends_at=''. Full regression: 271 passed / 0 failed / 13 skipped / 1 xfailed (172s) — test_phase_g::test_today_date_only_still_visible, test_iter16::test_date_only_today_all_day_event and test_iter16::test_no_non_canonical_rows_remain all PASS now. Frontend: Header Avatar fallback confirmed — user with picture=null + avatar='octopus emoji' renders the emoji in the header profile button (no generic User svg); /profile renders with no runtime-error overlay (Avatar import intact); zero broken images; an API-created all-day event dated today renders on /events as a card immediately.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {
+        "endpoint": "server.py startup normalize migration",
+        "issue": "Non-blocking edge case: normalize_iso fails open, so a row with a genuinely unparseable starts_at (e.g. 'next Friday') produces s == raw_starts, no $set, and the migration re-matches that row on every boot (never converges, though it logs 0 because no update happens). Consider skipping/quarantining unparseable rows explicitly. No such row exists in the current DB."
+      },
+      {
+        "endpoint": "GET /api/crew-bank/open",
+        "issue": "STILL OPEN from iteration_16 (not in this retest's scope, re-flagged): compares against now_iso[:10] (date-only) while /api/events and /api/admin/events now use full precision via upcoming_event_predicate. The two views can disagree about what is 'past'. Consider reusing upcoming_event_predicate here too."
+      },
+      {
+        "endpoint": "GET /api/admin/events",
+        "issue": "Takes no market query param (returns all markets) while GET /api/events does. Intentional for the global admin UI, but any caller passing ?market= is silently ignored — documented here so the parity assertion is not misread as a bug."
+      }
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {
+        "component": "Directory.jsx:30 / DirectoryDetail.jsx:82",
+        "issue": "BACKLOG (out of scope, unchanged): Boat Pro photo_url is still a raw <img> with no onError fallback — a dead photo shows the browser broken-image glyph. Should use <Avatar>.",
+        "selector": "img[alt$='company_name']",
+        "priority": "LOW"
+      }
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {
+        "screen": "/events",
+        "issues": [
+          "BACKLOG (confirmed still present): all-day events render the synthetic midnight as a real time — 'Aug 21, 2026, 12:00 AM'. Suppress the time when the stored timestamp is exactly T00:00:00+00:00 (and ends_at is next-day midnight), e.g. show 'Aug 21, 2026 · All day'."
+        ]
+      }
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter17.py",
+    "/app/test_reports/pytest/phase_all_iter17.xml"
+  ],
+  "action_items": [
+    "No blocking action items — all three iteration_16 regressions are verified fixed.",
+    "Optional: align GET /api/crew-bank/open with upcoming_event_predicate precision.",
+    "Optional polish: hide the 12:00 AM time for all-day events on /events (and any other event date renderer).",
+    "Optional: use <Avatar> for Boat Pro photo_url in Directory.jsx / DirectoryDetail.jsx."
+  ],
+  "critical_code_review_comments": [
+    "create_event still validates timestamps with a local _is_valid() ('T' + '+00:00' suffix) instead of a pydantic validator on schemas.EventCreate — the aggregator, admin and seed write paths get no such guarantee. Moving normalize_iso into the schema would make the canonical-format invariant hold for every writer.",
+    "date_utils.normalize_iso fails open on unparseable input; a strict variant for write paths would prevent bad data reaching mongo and would also let the startup migration converge on garbage rows.",
+    "upcoming_event_predicate/past_event_predicate now live in aggregator.py, which is really a scraper module; consider moving both into date_utils.py (or an events_query.py) so routers don't import the aggregator just to build a filter."
+  ],
+  "updated_files": ["/app/backend/tests/test_iter17.py"],
+  "success_rate": {"backend": "100% (271 passed / 0 failed / 13 skipped / 1 xfailed; 12/12 in the new iter17 suite incl. 4 restart-gated migration tests)", "frontend": "100% of avatar-fallback and all-day-visibility assertions"},
+  "seed_data_creation": "Temporary mongo docs: user TEST_i17_ui_user (picture=null, avatar='\ud83d\udc19', identity_verified=true) + session TEST_i17_ui_token, one all-day event 'TEST_i17_ui AllDay Regatta', plus per-worker TEST_i17_* users/events from pytest. All deleted; verified 0 TEST_i17 rows remain and seed_alex (crew.alex@sailmorenow.dev) identity_verified is still true.",
+  "should_call_test_agent_after_fix": false,
+  "should_main_agent_self_test": true,
+  "test_credentials": "/app/memory/test_credentials.md (OAuth-only; tests mint mongo sessions per /app/auth_testing.md). Browser User-Agent header required on backend requests.",
+  "context_for_next_testing_agent": "Run `cd /app/backend && python -m pytest tests/ -q` for the full suite (271 pass, ~3 min). Restart-gated migration tests: `SMN_ALLOW_RESTART=1 python -m pytest tests/test_iter17.py::TestMigrationConvergence -q -o addopts=''` (all 4 pass). NOTE on test hygiene: module-scoped cleanup fixtures must delete only rows matching RUN_PREFIX (which embeds PYTEST_XDIST_WORKER) — a broad title regex deletes the other worker's live rows mid-run and causes phantom failures (hit and fixed in test_iter17). /api/admin/events ignores ?market=, so parity must be asserted against the unfiltered /api/events. Frontend: 'Post event' button is gated to partner/boat_pro/admin, so a sailor session sees no new-event-btn (expected); the form uses datetime-local so all-day events only arrive via API/aggregator. Remaining backlog: crew-bank/open date-granularity, 12:00 AM display for all-day events, Directory raw <img>.",
+  "rca_of_the_issue": "iteration_16's three defects are resolved at the source: (a) create_event + the startup migration now synthesize ends_at = next-day midnight for date-only starts_at, so the full-precision comparison keeps all-day events visible for their whole UTC day while timed events keep intra-day accuracy; (b) the migration now treats a blank/empty ends_at as an explicit $set to null, so $ifNull falls back to starts_at and the migration converges (verified by a second restart producing no 'normalized' log line); (c) both list endpoints now call the single aggregator.upcoming_event_predicate(now_iso), verified by exact id-set equality, so they cannot drift; (d) Header passes user.picture || user.avatar into <Avatar>, whose non-URL branch renders the emoji in the tinted circle."
+}

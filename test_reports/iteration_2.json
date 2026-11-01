@@ -1,0 +1,25 @@
+{
+  "summary": "Backend-only regression testing for the aggregator past-event filter bug fix. All 6 pytest cases passed (6/6). Race Week Bellingham is visible in GET /api/events with starts_at=2026-07-20, ends_at=2026-07-25, market=Bellingham; total event count = 73 (>=66). Admin aggregate run preserves the in-progress multi-day event and is idempotent (no duplicates). Past single-day and past multi-day aggregator events are correctly filtered by the pre-sweep ($expr + $ifNull(ends_at, starts_at)). Crew bank flow (join/list/leave) works on Race Week Bellingham for premium user; free-tier user correctly gets 402.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_events_aggregator_bugfix.py",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "GET /api/events (server.py:785) has no server-side past-event filter — it relies entirely on the aggregator to not persist past events + the pre-sweep in aggregate/scheduler. If community-posted (non-aggregator) events go past, they stay visible forever. Consider filtering by end_for_cutoff in the list endpoint too, or documenting that community events are intentionally sticky.",
+    "server.py is 1310 lines; consider splitting into modules (events, crew, aggregator admin, users, reviews) per the >700-line guideline.",
+    "Duplicate sweep predicate `{$expr: {$lt: [{$ifNull: [\"$ends_at\", \"$starts_at\"]}, now_iso]}}` in server.py (line 455) and scheduler.py (line 29). Extract into a shared helper (e.g., aggregator.past_event_predicate(now_iso)) to keep the two entry points from drifting."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_events_aggregator_bugfix.py (new)"
+  ],
+  "success_rate": {"backend": "100%", "frontend": "N/A (not requested)"},
+  "test_credentials": "Minted 3 sessions in test_database.user_sessions: admin (jenn@sailmorenow.com, platform_role=admin), premium (subscription_tier=premium), free (subscription_tier=free). Session tokens passed via env vars ADMIN_TOKEN/PREMIUM_TOKEN/FREE_TOKEN to pytest.",
+  "seed_data_creation": "Test-only sessions/users in test_database; TEST_ prefixed crew bank entry created and deleted within the test. Synthetic past events (test_past_multiday_1, test_past_single_1) inserted to prove sweep removes them, then verified removed.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Race Week Bellingham event id: agg_sarc-48north_57844cc82d515925. Full pytest suite lives at /app/backend/tests/test_events_aggregator_bugfix.py and can be reused. Aggregator has 3 sources (sarc-48north iCal, ocsa-sailpdx iCal, owsa scraper) — the sweep predicate is duplicated in server.py:455 and scheduler.py:29.",
+  "rca of the issue": "Original bug: past-event filter (aggregator.ICalSource.fetch + pre-fetch sweep) compared only `starts_at` against the cutoff, causing multi-day events that had started but not ended (e.g. Race Week Bellingham, 2026-07-20 → 2026-07-25, mid-event on 2026-07-22) to be treated as past and swept. Fix (verified): aggregator.py:166 now uses `end_for_cutoff = ends_at or starts_at`; server.py:457 and scheduler.py:29 use the mongo `$expr {$lt: [{$ifNull: [\"$ends_at\", \"$starts_at\"]}, now_iso]}` predicate. Confirmed: Race Week is present after two consecutive aggregate runs, and synthetically-inserted past events (both single- and multi-day) are still removed by the sweep."
+}

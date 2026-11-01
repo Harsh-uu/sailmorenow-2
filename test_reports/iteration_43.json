@@ -1,0 +1,44 @@
+{
+  "summary": "iter43 Phase S retest. iter42 WAS a false negative for the source-on-disk question — all four features are present (git status shows admin_router.py, directory_router.py, schemas.py, App.js, AdminContact.jsx, DirectoryDetail.jsx as modified/uncommitted; iter42's grep evidently ran before/against a stale tree). HOWEVER the frontend build was BROKEN: AdminContact.jsx had a duplicate `import { toast } from \"sonner\"` (lines 5 and 7) causing a Babel/ESLint parse error and 'webpack compiled with 2 errors' — the whole SPA was unservable. I removed the duplicate import (in-scope typo/import fix); frontend now 'Compiled successfully'. After that: new suite /app/backend/tests/test_iter43_phase_s.py = 16/16 PASS (throttle 30/60s per X-Forwarded-For incl. per-IP isolation + 429 detail; photos strip/dedup/cap-6 persisted and returned by GET /api/boat-pros; reply 401/403/404/400-short/400-long/200 + replies-array + status='replied' + last_reply_at persistence verified via GET /api/admin/contact). Frontend: pro-photos-gallery + pro-photo-0..2 render on /directory/seed_marina; AdminContact reply composer works end-to-end (send disabled <5 chars, 'Reply sent.' toast, textarea cleared, new entry visible in contact-replies-<id>). ONE REAL FAILURE: the /@:handle route does not match — /@captainjane falls through to the wildcard and redirects to / (both on direct navigation and on client-side pushState), while the control /u/captainjane renders correctly with handle-label '@captainjane'.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "AdminContact.jsx", "issue": "BUILD BREAKER (fixed by me): duplicate `import { toast } from \"sonner\"` at line 7 (already imported at line 5) -> 'Parsing error: Identifier toast has already been declared', webpack compiled with 2 errors, entire frontend unservable. I deleted the duplicate line; please keep this fix.", "selector": "n/a", "priority": "CRITICAL"},
+      {"component": "App.js router (/@:handle)", "issue": "Route does not match. react-router-dom 7.15 does not support partial-segment dynamic params, so path=\"/@:handle\" never matches; /@captainjane hits <Route path=\"*\"> and redirects to '/' (handle-profile-page count = 0). Reproduced on hard navigation AND on in-app history.pushState, so it is a router-matching bug, not an ingress/rewrite issue. Control /u/captainjane works (handle-label = '@captainjane').", "selector": "[data-testid=\"handle-profile-page\"]", "priority": "HIGH"}
+    ],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter43_phase_s.py",
+    "/app/backend/tests/seed_iter43_ui.py",
+    "/app/test_reports/pytest/iter43_results.xml"
+  ],
+  "action_items": [
+    "Fix the /@:handle alias: replace <Route path=\"/@:handle\"> with a full-segment route, e.g. <Route path=\"/:atHandle\" element={<HandleAtAlias />} /> placed immediately before the wildcard, where HandleAtAlias renders <HandleProfile /> when the param starts with '@' (HandleProfile already strips the leading '@' via replace(/^@/, '')) and otherwise <Navigate to=\"/\" replace />. Static single-segment routes (/pricing, /dashboard, …) still out-rank a dynamic segment in react-router 7 ranking, so this is safe. Re-verify /@captainjane -> handle-profile-page + handle-label '@captainjane', and that /nonexistent still redirects to '/'.",
+    "Keep my AdminContact.jsx duplicate-import removal and add a pre-handoff `yarn lint` / frontend-log check — the previous handoff claimed live verification while the bundle was failing to compile.",
+    "Optional hardening (carried from iter42 review): cap per-photo URL string length in BoatProUpsert (currently 6 unbounded strings) and validate the URL scheme."
+  ],
+  "critical_code_review_comments": [
+    "admin_router.py handle_available uses `request: Request = None` with a noqa RUF013 plus a dead `from fastapi import Request as _R  # noqa: F401` import inside the body — make the parameter a plain `request: Request` (FastAPI always injects it) and delete the dead import.",
+    "_HANDLE_AVAIL_RATE is a per-process in-memory dict; with multiple uvicorn workers the effective limit becomes 30 * workers, and it resets on reload. Acceptable for preview, but note the limitation (same pattern as the existing /contact throttle).",
+    "admin_contact_reply returns 200 with ok:false when the mailer raises, and the UI surfaces a 'Logged locally — delivery failed' warning toast plus a '(delivery failed)' badge — consistent, good.",
+    "Reply HTML escaping only replaces '<' in the admin-authored body; use full HTML escaping (or a templating escape) for msg.get('name') too, which is user-supplied and interpolated unescaped into the email HTML."
+  ],
+  "updated_files": [
+    "/app/frontend/src/pages/AdminContact.jsx (removed duplicate sonner toast import)",
+    "/app/backend/tests/test_iter43_phase_s.py (new)",
+    "/app/backend/tests/seed_iter43_ui.py (new)",
+    "/app/test_reports/iteration_43.json"
+  ],
+  "success_rate": {"backend": "100% (16/16 pytest)", "frontend": "2 of 3 Phase S UI targets pass; /@:handle route fails"},
+  "seed_data_creation": "Ran /app/backend/tests/seed_iter43_ui.py (idempotent): users test-iter43-admin (platform_role admin) / test-iter43-user (sailor) / test-iter43-pro (boat_pro premium) with sessions test_sess_iter43_admin|user|pro; contact_messages row id 'test-iter43-contact'; handle 'captainjane' set on seed_jane. Also set 3 unsplash photos on boat_pros/seed_marina for the gallery UI test.",
+  "should_call_test_agent_after_fix": false,
+  "should_main_agent_self_test": true,
+  "test_credentials": "No passwords (Emergent Google OAuth). Use Bearer/cookie session tokens test_sess_iter43_admin (admin), test_sess_iter43_user (non-admin), test_sess_iter43_pro (boat_pro).",
+  "context_for_next_testing_agent": "Phase S backend is fully verified by /app/backend/tests/test_iter43_phase_s.py (16/16) — reuse it plus seed_iter43_ui.py. Only remaining Phase S defect is the /@:handle route (react-router 7 partial-segment param). Note: ALWAYS check `tail /var/log/supervisor/frontend.out.log` or eslint before concluding a UI feature is missing — iter42's 'nothing implemented' conclusion coincided with a duplicate-import compile failure. Still untested/data-gated from earlier iterations: DirectoryDetail pro-credentials + mutual-scorecard sections (no boat_pro has certifications/licenses/insurance; mutual_reviews empty).",
+  "rca_of_the_issue": "(1) iter42 false negative: the Phase S edits exist on disk as uncommitted modifications to 6 files; iter42's grep/HEAD check keyed off the last commit (Phase R) and a stale read, so it reported them absent. (2) The one genuine failure: react-router-dom 7.15 only matches dynamic params that occupy an entire path segment, so the literal '@' prefix in path=\"/@:handle\" makes the pattern unmatchable; the request falls to the '*' route which Navigates to '/'. (3) The frontend was additionally dark due to a duplicate `toast` import in AdminContact.jsx (Babel SyntaxError -> failed compile); removing line 7 restored the build and all Phase S UI except the alias route."
+}

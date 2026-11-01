@@ -1,0 +1,29 @@
+{
+  "summary": "iter41 frontend-only retest of the two iter40 open items, in a FRESH browser context with cache-busting query params. BOTH ARE FIXED. (1) /onboarding renders fully (no white-screen, no ReferenceError) and the HandleAvailability badge works for all four states with the ~250ms debounce. (2) Directory ProCard is now a role=link div: document.querySelectorAll('a a').length === 0, no validateDOMNesting warning, and both click targets navigate correctly. iter40's HandleAvailability failure was indeed a stale-bundle false negative.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "verified_working": [
+    "/onboarding as signed-in (onboarding_complete:false) user: onboarding-page renders, no page errors, handle-input present.",
+    "handle '@ab' -> data-testid='handle-availability-invalid' ('3-20 letters, numbers or _'); '@' prefix stripped from state.",
+    "fresh handle 'iter41fresh' -> handle-availability-checking observed first (debounce visible), then handle-availability-available ('@iter41fresh is available'). ",
+    "existing handle 'captainjane' -> handle-availability-taken ('@captainjane is already taken').",
+    "clearing the input removes the badge entirely (idle state, badge count 0).",
+    "/directory: 3 pro cards; nested <a> count = 0; no React validateDOMNesting/hydration warning in console.",
+    "Clicking [data-testid=pro-handle-seed_marina] navigates to /u/salishmarinaservices only (stopPropagation works, card did not also open).",
+    "Clicking the card body (h3) navigates to /directory/seed_marina."
+  ],
+  "test_report_links": ["/app/test_reports/iteration_41.json"],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Carry-over (non-blocking, from iter40): GET /api/handle/available is public and unthrottled — a handle-enumeration oracle; consider a light rate limit.",
+    "ProCard div[role=link] is keyboard-accessible (tabIndex + Enter/Space) which is good; the inner @handle Link remains focusable so keyboard users can still reach both targets."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "not tested this iteration", "frontend": "100% (11/11 checks)"},
+  "seed_data_creation": "Created user test-iter41-onb (onboarding_complete:false) + session test_sess_iter41 to reach /onboarding without the /dashboard redirect. Deleted after testing (verified: 1 user, 1 session removed).",
+  "should_call_test_agent_after_fix": false,
+  "should_main_agent_self_test": false,
+  "test_credentials": "Emergent Google OAuth; mint Mongo sessions per /app/auth_testing.md. NOTE: to test /onboarding you MUST seed the user with onboarding_complete:false, otherwise Onboarding.jsx redirects to /dashboard.",
+  "context_for_next_testing_agent": "Phase R is now fully green (backend 23/23 in iter40, frontend 11/11 here). Existing handles usable as 'taken' fixtures: captainjane, alexrivera, jennmcdonald, northsoundriggingco, salishmarinaservices. Still untested/data-gated: DirectoryDetail pro-credentials and mutual-scorecard sections (no boat_pro has certifications/licenses/insurance and mutual_reviews is empty).",
+  "rca_of_the_issue": "iter40's 'HandleAvailability is not defined' was a false negative caused by a stale CRA bundle served to the browser; the component exists at Onboarding.jsx L8-34 and is used at L173. Re-tested in a new browser context with ?cb= cache-busting after a frontend restart — no error, all four badge states verified."
+}

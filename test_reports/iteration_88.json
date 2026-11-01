@@ -1,0 +1,56 @@
+{
+  "summary": "Iter 88 regression. Backend 7/11 pass. KEY FINDINGS:\n  (A) BACKEND MIGRATION BUG — new BOAT_PRO_CATEGORIES are correctly served by GET /api/markets (constants updated), BUT existing boat_pros documents in Mongo were NEVER migrated. River City Canvas is still ['Sails & Canvas'] (expected ['Canvas']); demo-north-sound-rig is ['Rigging','Sails & Canvas'] (expected 'Sails'+'Canvas' split); salishmarinaservices is ['Detailing - Exterior','Sailing Instruction'] (expected to include 'Diesel Engine Specialist'); demo-harbor-shine is ['Cleaning & Detailing','Sailing Instruction'] (expected 'Detailing - Exterior'); demo-wash-n-go handle not present AT ALL in /api/boat-pros; user_98fb2dde0834 still has legacy 'Exterior boat detailing'. UI /directory confirms this — the cards render the legacy labels under 'River City Canvas', 'North Sound Rig & Sail', 'Harbor Shine Detailing & School', and 'Wash N Go'. No migration code exists in server.py / routers / startup. Needs a one-shot startup migration mapping legacy->new.\n  (B) WEB /pricing + /directory PASS: Pricing Boat Pros tab shows 'Reviews included' on BOTH Featured (card) and Premium (card). Hero watermark is a round /icon-512.png positioned bottom-left (class contains '-left-20 -bottom-16 opacity-10') on BOTH /pricing and /directory. Directory category dropdown exposes the new names (Detailing - Exterior/Interior, Sails, Canvas, Diesel Engine Specialist) and no legacy names appear in the dropdown.\n  (C) BACKEND Per-event crew: POST/PATCH/DELETE /api/events/{id}/crew work end-to-end with the paid user. positions/experience/notes/contact_via/post_to_feed persist and the entry appears in GET /events/{id}/crew. Status toggles 'seeking' <-> 'found' return 200.\n  (D) BACKEND Event create with optional ends_at: both {starts_at only, ends_at:null} and {starts_at+ends_at at 30-min marks} succeed and persist as expected.\n  (E) BACKEND Free-user gating: /messages, /posts, and /follows all return 402/403 with {code:'upgrade_required'} for the FREE account — iter87 follow-gate fix is confirmed in prod.\n  (F) MOBILE boot: NO redbox, NO 'Expected JavaScript, got text/html'. Visitor home renders the hero copy 'More time on the water starts here.'. HOWEVER the current Expo web preview is serving a cached/sleeping build: it points at the WRONG backend host ('boat-community.preview.emergentagent.com' instead of 'boat-community-1.preview.emergentagent.com' in /app/mobile/.env) and triggers CORS errors (Access-Control-Allow-Origin wildcard + credentials:include), plus the preview shows a banner 'Frontend Preview Only. Please wake servers to enable backend functionality'. As a result the deeper mobile flows (pricing cards, register home-market dropdown, dark-mode visible buttons, crew-bank join form, event-create 30-min dropdowns, Google button, 'Free for sailors / Boat Pros from $19.99' legal line, round-logo hero watermark) could NOT be visually verified — the bundle is stale and /pricing + /register pages render blank body text. The main agent needs to restart mobile and republish the Expo preview so that the current build (with the iter88 UI changes) is served before mobile UI can be re-verified.",
+  "platforms_tested": ["web", "mobile"],
+  "backend_issues": {
+    "critical": [
+      {"endpoint": "GET /api/boat-pros", "issue": "Boat Pro category migration NOT applied to existing docs. Expected mapping (per review request): rivercitycanvas 'Sails & Canvas' -> ['Canvas']; demo-north-sound-rig 'Sails & Canvas' -> 'Sails'+'Canvas'; salishmarinaservices should include 'Diesel Engine Specialist'; demo-harbor-shine 'Cleaning & Detailing' -> 'Detailing - Exterior'; demo-wash-n-go missing entirely in DB; user_98fb2dde0834 still 'Exterior boat detailing'. No migration script in server.py / routers / demo_seed.py. Add a startup migration or $set script.", "priority": "HIGH"}
+    ],
+    "minor": []
+  },
+  "frontend_issues": {
+    "web": {
+      "ui_bugs": [
+        {"component": "Directory Boat Pro cards", "issue": "Cards still display legacy category labels ('Sails & Canvas', 'Cleaning & Detailing', 'Exterior boat detailing') because the backend documents were never migrated. Dropdown is correct; data is stale.", "selector": "[data-testid='boat-pro-card-*']", "priority": "HIGH"}
+      ],
+      "integration_issues": [],
+      "design_issues": []
+    },
+    "mobile": {
+      "ui_bugs": [],
+      "integration_issues": [
+        {"flow": "Expo web preview bundle", "issue": "Preview is serving a cached build that calls 'https://owsa-events-preview--7evdsk8f.preview.emergentagent.com/api/*' (wrong host) with credentials:'include' against a wildcard CORS header, so every API request fails. /pricing and /register render but have no body text because the data fetches error out. /app/mobile/.env already points EXPO_PUBLIC_BACKEND_URL at boat-community-1 — main agent needs to `sudo supervisorctl restart mobile` and re-serve the fresh bundle so the preview picks up the new backend URL.", "affected_testIDs": []}
+      ],
+      "design_issues": [],
+      "react_native_issues": []
+    }
+  },
+  "parity_issues": [
+    {"flow": "Boat Pro category display", "platform": "web", "issue": "Web directory cards show legacy labels; cannot confirm mobile parity because mobile preview bundle is stale.", "expected": "Both surfaces render the new category labels on existing seeded Boat Pros.", "actual": "Web shows legacy labels on cards (dropdown is correct); mobile untestable in current preview."}
+  ],
+  "test_report_links": [
+    "/app/backend/tests/test_iter88_categories_and_crew.py",
+    "/app/test_reports/pytest/iter88_results.xml"
+  ],
+  "action_items": [
+    "BACKEND (HIGH): Add a one-shot startup migration that normalizes boat_pros.categories using: 'Sails & Canvas' -> ['Sails','Canvas']; 'Cleaning & Detailing' -> ['Detailing - Exterior']; 'Exterior boat detailing' -> ['Detailing - Exterior']; 'Interior detailing' -> ['Detailing - Interior']; 'Engine & Mechanical' -> ['Diesel Engine Specialist']. Then re-seed the missing demo-wash-n-go profile and update salishmarinaservices to add 'Diesel Engine Specialist', River City Canvas to just ['Canvas'], and user_98fb2dde0834 to ['Detailing - Exterior'].",
+    "MOBILE (HIGH): `sudo supervisorctl restart mobile` and verify the Expo web preview at https://boat-community.expo.preview.emergentagent.com now loads live data (no 'Wake servers' banner, no CORS errors). Only after that can the mobile-specific items in the review request (round-logo hero watermark, 'Free for sailors / Boat Pros from $19.99' two-line legal, dark-mode subscription + crew buttons visible, per-event Crew Bank form, 30-minute dropdowns on event create/edit, home-market picker on register, Google sign-in button, Reviews included on Boat Pro Premium) be re-verified.",
+    "Re-run /app/backend/tests/test_iter88_categories_and_crew.py after the Boat Pros migration — the four TestBoatProMigration tests should flip to green."
+  ],
+  "critical_code_review_comments": [
+    "constants.BOAT_PRO_CATEGORIES correctly uses the new names (/app/backend/constants.py:9-21). directory_router returns sorted(BOAT_PRO_CATEGORIES)+['Other'] — good.",
+    "seed_router.py:81 defines rivercitycanvas with ['Sails','Canvas'] but seed runs are idempotent and skip existing docs; no re-write path for legacy categories.",
+    "server.py has a one-shot normalize migration for events, but no migration for boat_pros categories — add one that runs once per startup with a flag doc in a 'migrations' collection to avoid re-running.",
+    "Register schema now requires first_name/last_name/account_type/primary_market (not name/role/home_market). test_credentials.md example payload is out of date and should be updated.",
+    "Mobile preview 'wake servers' banner + wrong-host CORS error strongly suggests the Expo build output in the preview is stale. Hot-reload is not reliable for mobile — restart mobile is required after any .env or code change."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter88_categories_and_crew.py"
+  ],
+  "success_rate": {"backend": "64% (7/11) — all 4 failures are the same Boat Pros migration gap", "frontend": "Web pricing + directory dropdown PASS; Web directory cards fail due to data gap; Mobile could not be verified beyond app-load (no redbox) due to stale preview bundle"},
+  "test_credentials": "Admin: jenn@sailmorenow.com / [REDACTED]. Register payload now needs {email, password, first_name, last_name, account_type, primary_market, agreed_to_guidelines:true}.",
+  "seed_data_creation": "Register endpoint spec changed — fresh users must use first_name/last_name/account_type/primary_market. Created ~2 qa.free+* and qa.paid+* users during gating + crew tests; one TEST88 Dec-2026 event (created + deleted); crew entry (created + deleted). All inert.",
+  "retest_needed": true,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Register schema: {email, password, first_name, last_name, account_type in {sailor,boat_owner,boat_pro,partner}, primary_market in PNW_MARKETS, agreed_to_guidelines:true}. Password: 8+/upper/digit/special. Admin /auth/me (not /me). PostCreate requires type+title+body+market. Events accept starts_at/ends_at (ends_at optional, nullable). System clock ~2026-10-07 — use Dec 2026+ for events. Per-event crew endpoints (POST/PATCH/DELETE /events/{id}/crew) work. Free-tier gating returns 403 upgrade_required (follow/post/dm). Boat Pros CATEGORY MIGRATION is the open bug — once applied, re-run tests/test_iter88_categories_and_crew.py. Mobile Expo preview was stale (CORS to wrong backend host, 'Wake servers' banner) — restart mobile and re-screenshot before re-testing the mobile UI items.",
+  "rca of the issue": "Boat-pro migration gap: constants.BOAT_PRO_CATEGORIES was updated with the new taxonomy and /api/markets serves the new list, but there is no migration/seed that rewrites EXISTING boat_pros docs. The seed_router is idempotent and only inserts new ones, so legacy demo/seed docs keep their old categories forever. One-shot startup migration (like the one that exists for events) is needed, with a mapping table 'Sails & Canvas'->['Sails','Canvas'], 'Cleaning & Detailing'/'Exterior boat detailing'->['Detailing - Exterior'], etc. Mobile preview CORS/wake-servers: preview bundle is stale and hard-codes the wrong backend host; a mobile restart will republish the fresh bundle that reads EXPO_PUBLIC_BACKEND_URL from /app/mobile/.env."
+}

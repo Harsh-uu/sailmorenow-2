@@ -1,0 +1,34 @@
+{
+  "summary": "Iter 85 — E2E of 3 approved features across shared backend + web + mobile: (1) Block button on member profile (web + mobile parity, prior toast-import crash fixed); (2) Web report/flag modal converted to radio-style option cards with hide-note; (3) Clickable profiles across Crew Bank standalone + event crew + open crew slots (web + mobile).\n\n=== BACKEND ✅ 6/6 pass (/app/backend/tests/test_iter85_block_flag_crew_handles.py, /app/test_reports/pytest/iter85_results.xml) ===\n  • POST /api/follows/block/{id} + DELETE /api/follows/block/{id}: full round-trip; blocked list shape is {count, blocked:[…]}; idempotent re-block; 401 without auth.\n  • POST /api/reports accepts new `category` field alongside `reason`/`target_type`/`target_id` and returns 200/201 (dedup+hidden flags preserved).\n  • GET /api/crew-bank/standalone entries expose `user_handle` — seeded captain_jenn confirmed.\n  • GET /api/crew-bank/open entries expose `user_handle` key (empty list at test time but schema verified via list check).\n  • GET /api/events/{id}/crew entries expose `user_handle` key.\n\n=== WEB ✅ (jenn admin, 1440x900) ===\n  • /u/{handle}: on a non-self profile, handle-block-btn is present alongside handle-follow-btn + handle-dm. Clicking handle-block-btn calls POST /follows/block/{id}, shows Sonner 'Blocked' toast, hides Follow+Message, and reveals handle-unblock-btn. Clicking handle-unblock-btn calls DELETE, shows 'Unblocked' toast, and restores Follow+Message+Block. No console crash (toast import fixed).\n  • Flag modal (flag-modal) on posts: 3 radio-style option cards flag-reason-inappropriate / flag-reason-inaccurate / flag-reason-other render as full-width buttons with check icon + teal outline on active. Default selection is 'inappropriate' and flag-hide-note is visible; switching to 'other' or 'inaccurate' hides the note; switching back re-shows it. flag-submit + flag-details render correctly.\n  • Crew Bank (/crew-bank): tapping a listing opens the standalone modal. crew-detail-profile-{user_id} link renders with correct href '/u/{handle}' (verified for captain_jenn → /u/captain_jenn).\n\n=== MOBILE (Expo web preview 390x844) ✅ ===\n  • /u/[handle]: on non-self profile, block-user-btn + follow-user-btn + message-user-btn all render. Tapping block-user-btn shows 'Blocked' toast; Follow+Message hide; unblock-user-btn appears. Tapping unblock-user-btn shows 'Unblocked' toast and restores all three action buttons.\n  • /crew-bank: tapping a listing card opens the detail modal. crew-detail-profile-{user_id} button routes to /u/[handle] (verified /u/captain_jenn navigation on tap; profile screen loads correctly).\n\n=== PARITY ✅ ===\nBlock/unblock flow behaves identically on web + mobile (both show toast, hide follow/message when blocked, and restore on unblock). Crew Bank profile navigation identical (link on web, router.push on mobile). Flag modal is web-only per the spec (mobile uses existing report flow).",
+  "platforms_tested": ["web", "mobile"],
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "web": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+    "mobile": {"ui_bugs": [], "integration_issues": [], "design_issues": [], "react_native_issues": []}
+  },
+  "parity_issues": [],
+  "test_report_links": [
+    "/app/backend/tests/test_iter85_block_flag_crew_handles.py",
+    "/app/test_reports/pytest/iter85_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "HandleProfile.jsx: 'toast' from 'sonner' is now correctly imported (line 5). toggleBlock() calls POST/DELETE /follows/block/{uid} atomically and updates blocked/following state via optimistic set — clean.",
+    "FlagButton.jsx: REASONS drives 3 radio cards. Category is submitted as `category` (raw key), while `reason` is the composed human-readable string. Backend accepts both fields — good separation of machine + human label.",
+    "community_router.py._hydrate_crew_verified: single .find({user_id:{$in:ids}}, {handle:1, identity_verified:1}) fetch — efficient batching. Both /crew-bank/standalone and /crew-bank/open share this hydrator.",
+    "community_router.py list_event_crew: separate hydration for handles when entries present — mirrors the crew-bank pattern. user_email is still scrubbed for non-owners/non-organizers.",
+    "mobile/app/u/[handle].tsx: block-user-btn testID switches to unblock-user-btn when blocked=true — clean toggle. Follow+Message buttons are conditionally rendered on `!blocked` — matches web parity spec.",
+    "mobile/app/crew-bank.tsx: crew-detail-profile-{user_id} closes modal (setSelected(null)) BEFORE router.push — prevents modal blocking the new screen.",
+    "mobile/app/events/[id].tsx: Pressable is `disabled={!c.user_handle}` — correctly no-ops on rows for users without a handle (defensive)."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter85_block_flag_crew_handles.py"
+  ],
+  "success_rate": {"backend": "100% (6/6)", "frontend": "web 3/3 flows, mobile 2/2 flows"},
+  "test_credentials": "Admin: jenn@sailmorenow.com / [REDACTED] Mobile via localStorage.session_token (JSON-encoded).",
+  "seed_data_creation": "2 disposable iter85_a_*/iter85_b_*@example.com sailors created for block round-trip test. 1 disposable iter85_flagger_*@example.com created + 1 TEST85 flag target post created + auto-removed via /admin/moderation/remove. Net zero effect. Block/unblock relationship reset within same test.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "All iter 85 features fully green on backend + web + mobile. Register payload requires first_name+last_name; posts require `type` field ('discussion'/'general'/etc). /api/follows/blocked returns {count, blocked:[…]} (NOT entries). /post/{id} route redirects to home on web unless via /feed. Discovery pattern for FlagButton: use /feed to enumerate flag-post-{id}, flag-discussion-{id}, flag-comment-{id}, flag-event-{id} testIDs. Author sees no flag button on own content.",
+  "rca of the issue": ""
+}

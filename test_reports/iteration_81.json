@@ -1,0 +1,45 @@
+{
+  "summary": "Iter 81 — E2E of 5 new features (moderation, support inbox, subject presets, following list, verified filter) across shared backend + web + mobile.\n\n=== BACKEND ✅ 13/13 pass (/app/backend/tests/test_iter81_moderation_support.py) ===\n  • POST /api/reports requires auth (401 unauth).\n  • flag with category=inappropriate on a post -> hidden=true and post disappears from GET /api/posts (verified public list). Duplicate flag by same reporter returns duplicate=true (idempotent). Admin PATCH /api/admin/reports/{id} status=dismissed unhides + post reappears.\n  • PATCH status=resolved delete_target=true -> target permanently gone (GET /api/posts/{id} → 404).\n  • category=inaccurate does NOT hide the target (still in public list, hidden=false).\n  • Invalid target_type -> 400. Empty reason -> 400.\n  • POST /api/support/contact with subject writes contact_messages row with source=profile_support; visible in admin GET /api/admin/contact.\n  • POST /api/contact (public) creates row without source=profile_support.\n  • GET /api/follows returns orgs entries carrying account_type (used by web/mobile to split People vs Organizations).\n  • GET /api/boat-pros returns identity_verified on every card. GET /api/crew-bank/standalone and /api/crew-bank/open both accept verified_only=true and filter to user_verified=true entries. All cards expose user_verified.\n  • GET /api/admin/reports returns insights.weekly (8 buckets) + top_targets + open_total.\n\n=== WEB ✅ (jenn admin cookie, 1440x900) ===\n  • /profile: profile-following-link present; support-preset-billing/-bug/-feedback/-other chips all render; clicking preset-bug sets support-subject to 'Bug' (verified by input_value).\n  • /following: page renders following-list-page with following-people + following-orgs sections and 1 unfollow button (jenn is following seed_partner from prior iterations).\n  • /crew-bank: crew-verified-toggle present; verified badges render as crew-verified-{uid}. Toggle click filters to verified only.\n  • /directory (Boat Pros): NO crew-verified-toggle (verified=0 rendering — seed pros don't have identity_verified=true, but code path exists and pro-verified-{uid} badge is emitted whenever identity_verified=true).\n  • /admin/contact: contact-filter-support + contact-filter-public + contact-filter-partner all present; 21 contact-source-{id} badges rendered on the queue.\n  • /admin/reports: report-category-{id} badge renders; report-hidden-{id} badge renders when the report auto-hid the target (0 currently pending — all iter81 hides were dismissed by tests).\n  • FlagButton modal: opens with flag-modal + flag-reason (3 options) + flag-submit; selecting 'inappropriate' shows flag-hide-note (amber warning). Confirmed on flag-post-{id} widget.\n\n=== MOBILE (Expo web preview, 390x844) ✅ ===\n  • /feed: 5 flag-post-{id} + 4 flag-discussion-{id} testIDs render on Hub feed cards (owner does not see her own flag — jenn is admin so she sees flag on other users' posts).\n  • ReportButton modal: flag-reason-inappropriate/-inaccurate/-other + flag-detail + flag-submit all present.\n  • /profile: profile-following-link + support-preset-billing/-bug/-feedback/-other all render.\n  • /following-list: shows People/Organizations sections with 1 unfollow-{uid} button.\n  • /crew-bank: crew-verified-toggle + crew-verified-{uid} badge render.\n  • /directory: NO toggle (correct); pro-verified-{uid} rendered conditionally on identity_verified.\n  • /admin -> Support tab: support-filter-all/-support/-public tabs, 21 support-reply-{id} entries; tapping a reply reveals support-reply-input-{id} + support-reply-send-{id}.\n\nParity: identical behavior on web + mobile for all 5 features. No regressions on prior iterations (follows, /messages, etc.).",
+  "platforms_tested": ["web", "mobile"],
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "web": {
+      "ui_bugs": [],
+      "integration_issues": [],
+      "design_issues": []
+    },
+    "mobile": {
+      "ui_bugs": [],
+      "integration_issues": [],
+      "design_issues": [],
+      "react_native_issues": []
+    }
+  },
+  "parity_issues": [],
+  "test_report_links": [
+    "/app/backend/tests/test_iter81_moderation_support.py",
+    "/app/test_reports/pytest/iter81_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "reports_router.py: idempotency query keys on {reporter_id, target_type, target_id, status:'open'} — this means a user who flags, admin dismisses, then user flags again WILL be able to open a new report (dismissed reports are ignored). This is intentional and matches the PRD wording.",
+    "reports_router.py admin_resolve_report: 'restore' path issues $unset for hidden_pending_review/hidden_at/hidden_reason on both dismiss AND resolve-without-delete. Correct — matches PRD ('restore/unhide').",
+    "reports_router.py: resolving-with-delete also auto-resolves all OTHER open reports on the same target with 'auto-resolved with target' — nice cascade.",
+    "directory_router.py:276 support/contact writes source='profile_support' + preserves user_id — this is what powers the admin filter buttons. Correct.",
+    "FlagButton.jsx composes reason as `${reasonLabel} — ${detail}` in the request body; category is sent as the raw key ('inappropriate'/'inaccurate'/'other'). Backend HIDE_CATEGORIES matches on lower-cased category. Wiring is clean.",
+    "FollowingList.jsx & following-list.tsx both filter with the same ORG_TYPES set {partner, community_partner, boat_pro} — consistent split logic across surfaces."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter81_moderation_support.py"
+  ],
+  "success_rate": {
+    "backend": "100% (13/13 pytest cases)",
+    "frontend": "web 7/7 flows PASS, mobile 6/6 flows PASS"
+  },
+  "test_credentials": "jenn@sailmorenow.com / [REDACTED] (admin). Disposable free users iter81_u1_*, iter81_u2_* created via /api/auth/register during pytest.",
+  "seed_data_creation": "During backend tests: ~2 posts created + soft-deleted (test_iter81_moderation_support.py). Support message from Iter One (iter81_u1_*) with subject 'Bug' + public contact from iter81@example.com with subject 'Feedback' remain in contact_messages (visible in /admin/contact — safe to leave; distinct TEST prefix in message body).",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "(a) All 5 iter81 features are working end-to-end on both surfaces. (b) Boat Pros identity_verified is currently false on all seeded pros — pro-verified-{uid} badge count is 0 in the wild but the render path is confirmed correct. If you seed a pro with identity_verified=true you'll see the badge appear immediately on /directory + mobile Directory. (c) HIDE_CATEGORIES = {'inappropriate'}; 'inaccurate' + 'other' do NOT auto-hide (verified). (d) Admin can restore a hidden target by dismissing OR by resolving-without-delete. (e) contact_messages row from iter81 tests will make the /admin/contact source-filter counts +1 each until cleaned up (harmless). (f) Test file uses /app/frontend/.env fallback to read REACT_APP_BACKEND_URL when the env var is not exported in pytest — pattern to reuse.",
+  "rca of the issue": ""
+}

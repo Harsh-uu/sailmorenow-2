@@ -1,0 +1,45 @@
+{
+  "summary": "Iteration 27 (Phase L) full-stack test. Backend: 24/24 pytest passed in /app/backend/tests/test_iter27.py covering GET /api/users/search (prefix/case-insensitive/empty/limit clamp 1..20/no _id or email leak), saved searches CRUD (401 unauth on GET/POST/DELETE, empty list for fresh user, create+GET persistence on users.saved_searches, case-insensitive duplicate=true, 2-60 char validation 400, DELETE 200 then 404, 10-item max slice keeping the newest, per-user isolation), /api/admin/analytics weekly.{posts,events,comments,discussions,users,digest} each 8 ascending buckets with 403 for non-admin and all pre-existing keys intact (no decorator regression), mailer.report_digest_email_html (header, New/Resolved/Dismissed cards, /admin/reports CTA, oldest-open line, empty state, HTML escaping) and scheduler._monday_admin_report_digest_job invoked directly against seeded reports (admin picked up by platform_role, subject contains 'new report', admin_report_digest_sent_at claim guard blocks an immediate second send) plus cron registration (mon 08:30 PT, id monday_admin_report_digest). Frontend: mention autocomplete, saved searches pin/unpin, 6 WeeklyChart cards on /admin/analytics and the reusable chart on /admin/reports (both empty and populated) all verified working. Two non-blocking issues found.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "scheduler._monday_admin_report_digest_job", "issue": "The trailing 'for extra in admin_emails()' loop adds every ADMIN_EMAILS address unconditionally, bypassing the admin_report_digest_sent_at claim guard. With ADMIN_EMAILS=jenn@sailmorenow.com (no matching user doc) that address is emailed on EVERY job run — the code comment claims an 'in-memory dedupe' but nothing persists, so a misfire/manual re-run duplicates the digest. Verified: second immediate run re-sent to the ADMIN_EMAILS address while the platform_role admin was correctly skipped."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "PostComments / MentionTextarea", "issue": "Layout regression: className 'flex-1 w-full ...' is passed down onto the inner <textarea>, but MentionTextarea wraps it in <div className=\"relative\"> which is now the flex child of the composer row. The wrapper has no flex-1, so the comment box collapses to ~180px wide instead of filling the row (placeholder wraps/truncates). Fix: apply 'relative flex-1' (or accept a wrapperClassName prop) on the wrapper div.", "selector": "[data-testid='comment-input-<postId>']", "priority": "MEDIUM"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Community feed comment composer", "issues": ["Narrow collapsed comment textarea (see PostComments flex-1 bug) makes the composer look broken next to the full-width Post button"]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter27.py",
+    "/app/backend/tests/seed_iter27_ui.py",
+    "/app/test_reports/pytest/iter27.xml"
+  ],
+  "action_items": [
+    "MentionTextarea: move layout classes/flex-1 to the wrapper div so the comment composer regains full width in PostComments.",
+    "scheduler._monday_admin_report_digest_job: persist a claim for ADMIN_EMAILS-only recipients (e.g. an admin_digest_claims collection doc keyed by email) or drop the unconditional extras loop, so re-runs don't duplicate emails.",
+    "Optional hardening: Feed.jsx line 143 uses p.type.replace(...) with no guard — a post document missing 'type' crashes the whole feed with an uncaught TypeError (reproduced during seeding). Use p.type?.replace() / a fallback."
+  ],
+  "critical_code_review_comments": [
+    "admin_router.py is accumulating unrelated concerns (digest preview, global search, user search, saved searches, admin analytics/events) — 330 lines and growing; consider splitting saved searches + users/search into their own router file before it gets larger.",
+    "POST /searches takes a raw Dict[str, Any] body instead of a Pydantic model; validation is manual. Prefer a BaseModel with constr(min_length=2, max_length=60).",
+    "GET /users/search is fully public and unauthenticated, returning user_id + name + avatar for any name prefix (single letter allowed) — enumerable member directory. Consider requiring auth or a minimum 2-char prefix.",
+    "POST /searches regex duplicate check uses ^q$ with only re-unescaped user input embedded via f-string ($regex: f'^{q}$'); q is not regex-escaped, so a query like 'sail.*' behaves as a pattern in the duplicate check. Use re.escape(q)."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter27.py",
+    "/app/backend/tests/seed_iter27_ui.py"
+  ],
+  "success_rate": {"backend": "100% (24/24)", "frontend": "100% of specified flows (1 layout defect noted)"},
+  "seed_data_creation": "Temporary TEST_iter27 users/sessions/post/comments/reports created in MongoDB and fully deleted after the run; no residual test data.",
+  "should_call_test_agent_after_fix": false,
+  "should_main_agent_self_test": true,
+  "test_credentials": "No passwords; sessions minted directly in MongoDB per /app/auth_testing.md. Admin achieved via platform_role='admin'.",
+  "context_for_next_testing_agent": "test_iter27.py loads /app/backend/.env into os.environ before importing backend modules (deps.py requires MONGO_URL at import time) — keep that when importing scheduler/mailer in-process. Note 'user_id' contains the substring '_id', so assert on '\"_id\"' when checking ObjectId leakage. Frontend flows verified: mention popover (@Al -> ArrowDown/Enter -> 'hey @AlexqaUser ' with caret at end, Escape closes, mouse-click insert, mention-token rendering after submit), TopSearch pin/unpin, 6 weekly charts on /admin/analytics, reports-weekly-chart empty + populated.",
+  "rca_of_the_issue": "Comment composer width: MentionTextarea introduces a wrapper <div className='relative'> between the flex row in PostComments and the textarea; the consumer-supplied 'flex-1' lands on the textarea (which is no longer a flex item), so the wrapper sizes to content. Admin digest duplicate sends: the claim-before-send guard only covers recipients discovered via db.users; the subsequent loop over admin_emails() adds addresses without any persisted claim."
+}

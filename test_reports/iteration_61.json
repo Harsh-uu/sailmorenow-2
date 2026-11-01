@@ -1,0 +1,25 @@
+{
+  "summary": "Retest of iteration_60 HIGH bug (mobile Crew self-listing state not reflected after save due to /mine returning {entry}-wrapped). Fix in /app/mobile/app/crew-bank.tsx line 40-41 (`const meEntry = m?.entry || m; setMine(meEntry && meEntry.user_id ? meEntry : null;`) VERIFIED FIXED on Expo web preview. Also verified regression: non-premium user sees crew-upsell, and open crew calls still list.",
+  "platforms_tested": ["mobile"],
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "mobile": {
+      "ui_bugs": [],
+      "integration_issues": [],
+      "design_issues": [],
+      "react_native_issues": []
+    }
+  },
+  "parity_issues": [],
+  "test_report_links": [],
+  "action_items": [],
+  "critical_code_review_comments": [],
+  "updated_files": [],
+  "success_rate": {"frontend": "100%"},
+  "test_credentials": "Marina (premium) token minted via mongosh (see /app/memory/test_credentials.md); Jane (non-premium) token minted similarly. Both cleaned up post-test (listing removed via DELETE /api/crew-bank/standalone).",
+  "seed_data_creation": "Minted two ephemeral session tokens (test_session_mobile_*) and cleared any preexisting crew_bank_standalone entry for seed_marina before test.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Bug from iter60 (Crew self-listing banner missing after save due to /crew-bank/standalone/mine returning {entry:{...}|null} wrapper) is FIXED and verified end-to-end on the Expo web preview. Verified flows on mobile viewport 390x844 with seed_marina token: (1) initial state -> list-myself-cta rendered; (2) opened form, selected pos-Pit + pos-Helm + mk-Greater Seattle, tapped save-listing-btn -> GREEN 'You're listed as available crew' banner rendered with remove-listing-btn AND 'Pit, Helm' subtitle; (3) full page reload -> banner persisted (state derived from /crew-bank/standalone/mine, confirming unwrap works); (4) regression seed_jane non-premium -> crew-upsell rendered (no CTA/banner), open crew calls still list (1 event: 'RCYC - Long Distance Race'). Note on removal flow: React Native `Alert.alert` on react-native-web doesn't render a two-button confirm dialog in the Expo web preview (RN-web limitation), so I could not click a 'Remove' confirm option through the UI in the browser harness. However DELETE /api/crew-bank/standalone (the exact endpoint the removeListing callback calls) returns {ok:true} and /mine then returns {entry:null}, so the code path is sound on native. Marina's test listing has been cleaned up.",
+  "rca of the issue": "Root cause (already fixed by main agent): /api/crew-bank/standalone/mine returns {\"entry\": {...}|null}, but the mobile screen was reading `m.user_id` directly, so `setMine(m && m.user_id ? m : null)` always evaluated to null (m had `entry` not `user_id`). Fix (verified): unwrap `m?.entry || m` before the truthiness check. Confirmed by observing that after save AND after cold reload, the green banner + trash icon render with correct positions subtitle."
+}

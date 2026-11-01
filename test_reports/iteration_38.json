@@ -1,0 +1,41 @@
+{
+  "summary": "Retest of the 4 iteration-37 findings: NONE of them are fixed. The source files (frontend/src/pages/Messages.jsx, frontend/src/pages/Directory.jsx, backend/routers/messaging_router.py, backend/routers/directory_router.py) all still carry the exact iter37 code (mtime 18:30, i.e. unchanged since the iter37 report was written at 18:39). Verified by code inspection + live pytest + a live browser computed-style check. Stopping early: there is nothing new to test.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "GET/POST /api/messages/{thread_id}[/read]", "issue": "NOT FIXED. Still `if u['user_id'] not in thread_id.split('-')` (messaging_router.py L40 for GET, L54-56 for /read). Live retest: user 'TEST-iter37-dash-xxxxxx' on thread '<uid>-seed_marina' -> 403 Forbidden (test_iter37_phase_q.py::TestReadReceipts::test_participant_check_breaks_for_dashed_user_ids FAILED). db.dm_threads.participants is NOT used anywhere in the auth check.", "priority": "HIGH"},
+      {"endpoint": "POST /api/contact", "issue": "NOT FIXED. Throttle still runs BEFORE payload validation (directory_router.py L109-113 executes before the name/email/message checks at L114-124). Live retest: 3x400 (invalid) then a valid payload -> 429 (test_invalid_submissions_consume_quota still PASSES, i.e. old behaviour intact).", "priority": "HIGH"},
+      {"endpoint": "POST /api/contact", "issue": "NOT FIXED. No pruning of _CONTACT_RATE: expired timestamps are only filtered for the current IP on read; keys for other IPs are never removed, so the dict grows unbounded."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "Directory", "issue": "NOT FIXED. Handle contrast unchanged: computed color rgb(148,163,184) = slate-400 at 11px on white for basic/featured cards (pro-handle-seed_rigging, pro-handle-seed_canvas, ~2.6:1) and rgb(203,213,225) = slate-300 on the premium navy card (pro-handle-seed_marina). Directory.jsx L47 still `isPremium ? 'text-slate-300' : 'text-slate-400'`. Requested slate-500 / slate-200 was not applied.", "selector": "[data-testid^=\"pro-handle-\"]", "priority": "MEDIUM"}
+    ],
+    "integration_issues": [
+      {"flow": "DM read receipts (mark-read on thread open + on inbound WS message)", "issue": "NOT FIXED. `grep -rn '/read' /app/frontend/src` returns only NotificationsBell.jsx (/notifications/{id}/read). Messages.jsx loadMessages() (L27-31) does only GET /messages/{tid}; the WS 'message' handler (L36-41) only appends the message + reloads threads. No POST /api/messages/<tid>/read exists anywhere, so the sender's bubble can never flip from receipt-sent-<id> to receipt-read-<id> in real usage. Not re-tested end-to-end in the browser because the client call is provably absent.", "affected_selectors": ["[data-testid=\"thread-<user_id>\"]", "[data-testid=\"receipt-sent-<id>\"]", "[data-testid=\"receipt-read-<id>\"]"]}
+    ],
+    "design_issues": []
+  },
+  "test_report_links": ["/app/backend/tests/test_iter37_phase_q.py", "/app/backend/tests/test_iter37_ws_read.py"],
+  "action_items": [
+    "The iteration-37 fixes were never written to disk (git status shows the same 4 modified files as iter37, unchanged content). Re-apply all 4 fixes, verify locally, THEN request a retest.",
+    "Messages.jsx: POST /api/messages/<tid>/read inside loadMessages()/thread select AND in the WS 'message' handler when the message is to me and the thread is open.",
+    "messaging_router: resolve participants from db.dm_threads.participants (fallback: allow when thread_id startswith/endswith user_id) for both GET /messages/{tid} and POST /messages/{tid}/read.",
+    "directory_router.contact_form: move the throttle record/check after payload validation and prune expired _CONTACT_RATE keys on each request.",
+    "Directory.jsx L47: text-slate-500 on white cards, text-slate-200 on the premium card."
+  ],
+  "critical_code_review_comments": [
+    "No code delta at all between iter37 and this retest — please confirm edits are saved before requesting a retest (hot reload also means an unsaved edit is invisible).",
+    "Once the contact throttle is moved after validation, test_iter37_phase_q.py::TestContactRateLimit::test_invalid_submissions_consume_quota must be inverted (expect 200) — it currently encodes the buggy behaviour on purpose.",
+    "For the prune assertion, add a test that injects a fake old key into directory_router._CONTACT_RATE (import the module in-process) and asserts it is gone after a subsequent request."
+  ],
+  "updated_files": ["/app/test_reports/iteration_38.json"],
+  "success_rate": {"backend": "0% of the 2 requested backend fixes verified (2/2 defects still reproduce)", "frontend": "0% of the 2 requested frontend fixes verified"},
+  "seed_data_creation": "None persisted. pytest run created/removed its own TEST_iter37_* users and contact_messages rows (module fixtures clean up).",
+  "should_call_test_agent_after_fix": true,
+  "should_main_agent_self_test": false,
+  "test_credentials": "No passwords (Emergent Google OAuth). Use /app/backend/tests/seed_iter37_ui.py to mint sessions.",
+  "context_for_next_testing_agent": "Iteration 38 was a no-op retest: the 4 iter37 fixes are absent from the codebase. All iter37 test assets are still valid: run `cd /app/backend && python -m pytest tests/test_iter37_phase_q.py -p no:randomly -q` (dashed-user_id test fails while the split('-') check remains) and tests/test_iter37_ws_read.py for the WS message.read broadcast (that part works). Directory handle colors checked live via getComputedStyle on [data-testid^='pro-handle-'] — currently slate-400/slate-300. Frontend /read call check: `grep -rn '/read' /app/frontend/src`.",
+  "rca_of_the_issue": "The developer agent requested a retest without the fixes being present on disk: `git status` lists the same modified files as iteration 37 and their contents are byte-identical to what iter37 reported (messaging_router still splits thread_id on '-', contact_form throttles before validation with no pruning, Messages.jsx has no /read POST, Directory.jsx still text-slate-400/300). Every one of the 4 findings reproduces exactly as documented in iteration_37.json."
+}

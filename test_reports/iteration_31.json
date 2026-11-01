@@ -1,0 +1,47 @@
+{
+  "summary": "Phase M (iteration 31) full-stack test. Backend: 14/14 pytest assertions pass in /app/backend/tests/test_iter31_phase_m.py — GET /api/searches/suggestions (public 200, correct {q,count} ranking: seeded 3x'sailing' ranks above 2x'race', hard limit of 5, {suggestions:[]} when no user has saved_searches, freshly pinned query appears), GET /api/admin/digest/render (401 unauth, 403 non-admin, 200 text/html for ?market= with 'Sunday Digest &middot; Greater Seattle' in the header, 400 with neither param, 200 multi-market via ?user_id= rendering 'Your markets' + both market names, 404 unknown user_id, 400 target user with no market), push preferences ('mention' in kinds, default true, PATCH {mention:false} persists across a re-GET), and regression that /api/admin/analytics is still registered (200 admin w/ weekly arrays, 403 non-admin). Frontend (Playwright, real preview URL, mongo-minted sessions): /admin/analytics renders SVG sparklines with valid polyline points for stat-users/posts/events/comments/discussions/digest and NO sparkline node for stat-reports/stat-push; digest-preview block visible, digest-preview-market options exactly equal Object.keys(events.by_market), digest-preview-btn calls window.open with /api/admin/digest/render?market=<url-encoded selection> (verified for two different selections) and that URL returns 200 text/html via cookie auth in-browser; TopSearch shows search-suggestions for a signed-in user with empty input, suggestion-0 click fills the input ('spinnaker tuning') and triggers the search; Profile PushPreferencesPanel shows pref-mention labelled \"You're @mentioned\", toggling issues a PATCH /api/push/preferences and the new value survives a reload. Degradation test (analytics response stubbed with weekly removed and by_market emptied): 0 sparklines, no weekly-charts block, select shows 'No markets yet' and the preview button is disabled — zero console/page errors. All seed users/sessions deleted after the run.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "GET /api/searches/suggestions", "issue": "Aggregation groups on lower-cased q but returns $first sample casing, so ties in count between different casings return whichever doc Mongo saw first (cosmetic). Also dead code: `import re as _re` + `_ = _re` is unused — remove."},
+      {"endpoint": "GET /api/searches/suggestions", "issue": "No auth is required (per design) but there is no $limit before $unwind/$group; a full collection scan + unwind of users runs on every keystroke-open of TopSearch. Fine at current scale; consider a short TTL cache if user count grows."},
+      {"endpoint": "GET /api/admin/digest/render", "issue": "?market=all with no user_id falls into the 400 branch only when user_id is absent; with ?market=all&user_id=<id> it correctly renders the user's markets. Behaviour is fine but 'all' without user_id returns 'Provide ?market=<name> or ?user_id=<id>' which is slightly misleading."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [
+      {"flow": "Digest preview HTML (window.open new tab)", "issue": "Not a defect today (cookie session_token is same-origin so the new tab authenticates), but the opened URL relies purely on cookie auth — if the app ever switches to Bearer-only sessions this preview tab will 401 with no in-app fallback/error surface.", "affected_selectors": ["digest-preview-btn"]}
+    ],
+    "design_issues": [
+      {"screen": "/admin/analytics stat cards", "issues": ["Sparklines for all-zero series (comments, discussions) render as a flat baseline that reads like a decorative rule; consider hiding the sparkline (or showing a muted dashed line) when every bucket is 0."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter31_phase_m.py",
+    "/app/backend/tests/seed_iter31_ui.py",
+    "/app/test_reports/pytest/iter31_results.xml"
+  ],
+  "action_items": [
+    "pages/DigestPreview.jsx:10-40 — this page has its own duplicated copy of PushPreferencesPanel whose LABELS map is missing the 'mention' key, so on that page the checkbox would render the raw key 'mention' instead of \"You're @mentioned\". Delete the local copy and import @/components/PushPreferencesPanel (single source of truth).",
+    "Remove the unused `import re as _re` / `_ = _re` no-op in search_suggestions (admin_router.py:225,237).",
+    "Optional: skip rendering Sparkline when all trend buckets are 0."
+  ],
+  "critical_code_review_comments": [
+    "Route ordering is safe: GET /searches/suggestions vs DELETE /searches/{search_id} differ in method, so the literal path is not shadowed — verified live (200 with a real payload).",
+    "admin_router.py:241-282 — auth is enforced before any DB read (require_admin first), user_id 404 and empty-markets 400 are both checked before rendering; verified all four error paths over HTTP.",
+    "Sparkline.jsx:6-8 — the <2 point guard returns a sized placeholder span; AdminAnalytics only passes `trend` when data.weekly?.<key> exists, so undefined weekly renders nothing and throws nothing (verified with a stubbed analytics response).",
+    "AdminAnalytics.jsx:181-203 — DigestPreview useState(markets[0]) does not re-sync if `markets` changes after mount; harmless here because the component mounts only after data loads, but a useEffect sync would be safer if the page ever refetches."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter31_phase_m.py",
+    "/app/backend/tests/seed_iter31_ui.py"
+  ],
+  "success_rate": {"backend": "100% (14/14)", "frontend": "100% (all 8 UI/integration checks incl. degradation)"},
+  "seed_data_creation": "Temporary only. pytest module fixture created ~9 TEST users + sessions tagged iter31_<hex> (stashing and restoring any pre-existing users' saved_searches for deterministic aggregation); seed_iter31_ui.py created admin/user/2 pinner users tagged iter31_ui. All removed — verified 0 leftover users/sessions with an iter31 tag.",
+  "should_call_test_agent_after_fix": false,
+  "should_main_agent_self_test": true,
+  "test_credentials": "No passwords — sessions minted in mongo per /app/auth_testing.md (admin via platform_role='admin'). Re-seed with: python /app/backend/tests/seed_iter31_ui.py (cleanup: --cleanup).",
+  "context_for_next_testing_agent": "test_iter31_phase_m.py must NOT assert absolute positions in /searches/suggestions: pytest.ini forces xdist loadscope, so two workers seed their own TAG data concurrently — filter suggestions by the TAG suffix and assert relative order (already done). For UI runs use seed_iter31_ui.py (prints tokens) and add the session_token cookie for domain nw-sailing-community.preview.emergentagent.com; patch window.open in an init script to capture the digest-preview URL. The only open item is the duplicated PushPreferencesPanel inside pages/DigestPreview.jsx missing the 'mention' label.",
+  "rca_of_the_issue": "No functional defect found this iteration. Single earlier test failure was a test-harness artifact (xdist parallel workers each seeding suggestion data, so absolute rank positions were non-deterministic); fixed in the test by tag-filtering, then 14/14 green serially and in parallel."
+}

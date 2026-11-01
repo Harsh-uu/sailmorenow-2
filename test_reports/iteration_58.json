@@ -1,0 +1,36 @@
+{
+  "summary": "Mobile-only, frontend-only E2E of the new email+password auth on the Expo web preview (viewport 428x920). ALL requested flows pass. Home (/) renders with the horizontal dark-BG logo + sailing background photo (behind LinearGradient overlay), the 'PACIFIC NORTHWEST SAILING' eyebrow, 'More time on the water starts here.' (orange 'starts here.'), and three CTAs: create-account-btn, signin-btn, google-signin-btn. Register: /register renders with reg-first-input, reg-last-input, reg-email-input, reg-password-input, reg-type-{sailor,boat_owner,boat_pro,partner}, reg-market-<market>, reg-newsletter-switch, reg-submit-btn, reg-google-btn. Validation: submitting with password 'short' surfaces reg-error='Password must be at least 8 characters' (no crash). Choosing reg-type-boat_owner correctly reveals reg-extra-input labelled 'Boat name'. Successful submit (test.reg.mobile.<ts>@example.com / hunter2pass / Boat Owner / 'TEST Auto Boat' / Greater Seattle) lands on /(tabs)/feed which renders the Community Feed; localStorage.session_token is set (66-char Bearer). Profile shows 'Auto Tester'; tapping logout-button returns to '/' (logged-out state restored). Sign in: /signin renders signin-email-input, signin-password-input, signin-submit-btn, signin-google-btn. Wrong password shows signin-error='Incorrect email or password'. Admin login (jenn@sailmorenow.com / [REDACTED]) lands on /feed and GET /api/auth/me returns platform_role='admin', email='jenn@sailmorenow.com'. Google buttons: google-signin-btn on home, signin-google-btn on /signin, reg-google-btn on /register are all present and pressable (external OAuth not completed, per spec). Regression: feed loads posts (Captain Jane / Puget Sound Sailing Society / Alex Rivera etc.), Profile shows the user, logout works. No red screen. Only console noise: expected 401s on /auth/me before auth (pre-existing behavior).",
+  "platforms_tested": ["mobile"],
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "mobile": {
+      "ui_bugs": [],
+      "integration_issues": [],
+      "design_issues": [],
+      "react_native_issues": []
+    }
+  },
+  "parity_issues": [],
+  "test_report_links": [
+    "/tmp/m_home.png",
+    "/tmp/m_reg_filled.png",
+    "/tmp/m_feed_after_reg.png",
+    "/tmp/m_reg_bottom.png"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "AuthContext.emailLogin/register correctly store the Bearer session_token via setToken() and set the user; setLoading(false) is called defensively — good.",
+    "register.tsx: password<8 check is client-side only; server also enforces (verified via existing backend curl). Fine.",
+    "index.tsx: LinearGradient overlay is very opaque (0.65→0.96 rgba(31,63,91)) which visually hides the HERO_IMG behind it in the Expo web preview. Not a bug — matches intent — but if the sailing photo should be more prominent, reduce the top opacity (e.g., 0.35→0.85).",
+    "index.tsx: HERO_IMG and LOGO_HORIZONTAL_DARK are remote (customer-assets-cm19k8pv...emergentagent.net). At screenshot time naturalWidth=0 was observed for both (probable slow first paint). Consider preloading or bundling the logo locally to avoid a flash of dark-navy without logo on cold load.",
+    "logout-button testID exists on Profile and works — nice."
+  ],
+  "updated_files": [],
+  "success_rate": {"frontend": "100% — every requested mobile auth flow (home render, register-with-validation, register success→feed, admin signin, wrong-pw error, Google buttons present on all three screens, logout regression) passed."},
+  "test_credentials": "Admin: jenn@sailmorenow.com / [REDACTED] (returned platform_role=admin via /api/auth/me). Freshly registered user this run: test.reg.mobile.1789087335@example.com / hunter2pass (Boat Owner, Greater Seattle, boat_name='TEST Auto Boat').",
+  "seed_data_creation": "1 new user created via the mobile register flow (test.reg.mobile.1789087335@example.com). No manual DB seeding was needed — the app's own /api/auth/register + /api/auth/login endpoints handled everything. Main agent may prune TEST prefixed users if desired.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Expo web preview mobile auth works end-to-end. Successful pattern used: (1) mobile viewport 428x920, (2) wait_for_selector on the target testID with 20-45s timeouts (NOT fixed sleeps — Expo dev bundle can be slow first paint), (3) after register/login, assert wait_for_url('**/feed**') AND read window.localStorage.getItem('session_token'), then fetch /api/auth/me with the Bearer to confirm role. For validation errors, wait_for_selector('[data-testid=\"reg-error\"]') / '[data-testid=\"signin-error\"]'. Home renders even though the two <img> elements report naturalWidth=0 shortly after load — image URLs are on customer-assets-cm19k8pv.emergentagent.net; not a blocker.",
+  "rca of the issue": "No blocking issues. Minor optional polish: bundle/pre-load the horizontal-dark logo locally to eliminate the brief unstyled navy state, and consider softening the LinearGradient top opacity if the sailing hero photo should be visible on /."
+}

@@ -1,0 +1,48 @@
+{
+  "summary": "Iter53 test of (1) IP ban list, (2) event edit/cancel, (3) flyer upload, (4) admin header dropdown. BACKEND suite /app/backend/tests/test_iter53_bans_event_edit_flyer.py = 13/14 PASS. IP bans: admin POST /api/admin/ip-bans {203.0.113.9} -> 200 (no _id, banned_by set), GET lists it, GET /api/markets with X-Forwarded-For: 203.0.113.9 -> 403 while the same call without the header -> 200, /api/admin/ip-bans is still reachable from the banned IP (undo path works), DELETE -> 200 {ok:true} and the forwarded request -> 200 again; member POST -> 403, anon GET -> 403, DELETE unknown IP -> 404, blank IP -> 400, admin banning own IP (X-Forwarded-For == body.ip) -> 400 'Refusing to ban your own IP'. Event edit/cancel: partner creates event + crew.alex RSVPs; PATCH {location:'New dock'} -> 200, persists in GET /api/events, alex gets an event_updated notification and the actor (partner) does NOT; alex PATCH -> 404, anon PATCH -> 401; PATCH agg_* event as admin -> 400; PATCH invalid market/starts_at/category -> 400; PATCH image_url of 500k chars -> 400; DELETE -> 200, event gone from GET /api/events, alex gets event_cancelled, registrations wiped. Flyer: small data URL round-trips through POST/GET /api/events. FRONTEND: partner /events edit+cancel flow fully works (event-manage -> edit-event-<id> -> editing-banner + prefilled title/location/start/market, submit label 'Save changes' -> 'Event updated' toast -> row shows 'New dock'; then cancel-event-<id> + confirm -> 'Event cancelled' toast, row gone). Admin /admin/analytics abuse-panel: ban-198.51.100.7 (confirm) -> toast, unban button + ban-list + banned-<ip> chip appear; unban -> toast, chip gone, Ban IP button back. Admin header admin-menu shows all 4 nav-admin-* links with correct hrefs; member (crew.alex) has no admin-menu, no new-event-btn and no event-manage on 6 events checked. List/map/calendar views still render (22 rows). ONE CRITICAL FRONTEND BUG: the flyer upload path is broken end-to-end (see rca) and it hard-crashes the React app.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "POST /api/events", "issue": "No MAX_PHOTO_URL_CHARS guard on create: image_url of 500,000 chars is accepted and stored (200). PATCH /api/events/{id} correctly returns 400. Add the same `if len(doc.get('image_url') or '') > MAX_PHOTO_URL_CHARS: 400` check in create_event."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "FlyerUploader", "issue": "compressImageToDataURL() returns an OBJECT {dataUrl,bytes,chars,quality,cap,ok} but FlyerUploader does onChange(await compressImageToDataURL(file)) — so image_url becomes an object. flyer-preview renders with src='[object Object]' (broken image) and submitting the form sends image_url as an object.", "selector": "[data-testid=\"flyer-preview\"]", "priority": "CRITICAL"},
+      {"component": "Events.jsx submit() / toast error handling", "issue": "POST /api/events then returns 422 and the FastAPI detail is an ARRAY of objects; toast.error(e.response.data.detail) renders it as a React child -> 'Objects are not valid as a React child (found: object with keys {type, loc, msg, input, url})' uncaught runtime error that blanks the whole page (dev error overlay). Any 422 from any form will do this — normalize detail to a string before toasting.", "selector": "[data-testid=\"event-submit\"]", "priority": "CRITICAL"}
+    ],
+    "integration_issues": [
+      {"flow": "Post/edit event with flyer", "issue": "Cannot post any event that has a flyer attached — request rejected 422 and the app crashes; event is never created. ProPhotosUploader uses the same helper correctly (reads r.dataUrl), only FlyerUploader is wrong.", "affected_selectors": ["[data-testid=\"flyer-input\"]", "[data-testid=\"flyer-preview\"]", "[data-testid=\"event-submit\"]"]}
+    ],
+    "design_issues": [
+      {"screen": "/events list", "issues": ["Carry-over data noise: multiple aggregator rows still titled 'Book online' (OWSA feed)."]},
+      {"screen": "/admin/analytics", "issues": ["One console 401 on page load before the session resolves (cosmetic, pre-existing)."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter53_bans_event_edit_flyer.py",
+    "/app/backend/tests/seed_iter53_ui.py",
+    "/app/test_reports/pytest/iter53_results.xml"
+  ],
+  "action_items": [
+    "FlyerUploader.jsx line 14: use the returned object — const r = await compressImageToDataURL(file); if (!r) return toast.error('Couldn't process that image'); if (!r.ok) return toast.error('Image too large even after compression'); onChange(r.dataUrl);",
+    "Events.jsx (and any shared api error helper): stringify FastAPI 422 details before toasting, e.g. const msg = Array.isArray(d) ? d.map(x=>x.msg).join(', ') : (typeof d === 'string' ? d : 'Failed'). Consider an app-level ErrorBoundary so a bad toast payload can't blank the page.",
+    "Add the MAX_PHOTO_URL_CHARS length check to POST /api/events (create_event) to match PATCH."
+  ],
+  "critical_code_review_comments": [
+    "imageCompress.js returns a rich object while one of its two callers treats it as a string — make the contract explicit (return the string and throw/return null on failure, or rename to compressImage()) so this class of bug can't recur.",
+    "ipban_router keeps an in-process _BANNED set; with multiple uvicorn workers/pods a ban applied on one worker is not seen by the others until their first load_bans(). Bans/unbans should invalidate across processes (re-read on a TTL or query Mongo per request with a short cache).",
+    "ban_middleware runs before auth and short-circuits every /api path except /api/admin/ip-bans — good, but the exemption is path-prefix based, so an admin locked out cannot even call /api/auth/me; the admin UI on /admin/analytics loads other admin endpoints that would 403. Consider exempting /api/auth/* too."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter53_bans_event_edit_flyer.py",
+    "/app/backend/tests/seed_iter53_ui.py"
+  ],
+  "success_rate": {"backend": "93% (13/14)", "frontend": "80% — bans, edit/cancel, admin menu, member gating all pass; flyer upload broken (crashes app)"},
+  "seed_data_creation": "Sessions minted by /app/backend/tests/seed_iter53_ui.py: test_iter53_admin_token (jenn@sailmorenow.com), test_iter53_partner_token (partner.psss), test_iter53_member_token (crew.alex), 2-day expiry. Generated 60 hero_analytics 429s from X-Forwarded-For 198.51.100.7 to populate the abuse panel (left in place; abuse rows are read-only telemetry). All TEST_iter53 events, notifications and IP bans were deleted afterwards (db.ip_bans is empty, 0 TEST_ events).",
+  "should_call_test_agent_after_fix": true,
+  "should_main_agent_self_test": false,
+  "test_credentials": "Cookie/Bearer session_token=test_iter53_partner_token / test_iter53_admin_token / test_iter53_member_token; re-mint with `python /app/backend/tests/seed_iter53_ui.py`. Cookie domain nw-sailing-community.preview.emergentagent.com, secure, sameSite=None.",
+  "context_for_next_testing_agent": "Regression: `cd /app/backend && python -m pytest tests/test_iter53_bans_event_edit_flyer.py -q` (only TestFlyerCreate::test_create_with_huge_image_url_rejected should fail until create_event gets the size guard). Do NOT ban 104.198.214.223 — that is the test runner / browser egress IP and it appears in the abuse panel; use 198.51.100.7 (populate it by POSTing /api/analytics/hero 80x with X-Forwarded-For: 198.51.100.7). To find an event id for UI work, GET /api/events and match on title rather than DOM traversal (parent innerText walks match the whole list). After the FlyerUploader fix, retest: flyer-pick -> setInputFiles -> flyer-preview src must start with 'data:image/jpeg;base64,' (currently '[object Object]'), then submit and confirm the row/modal renders the image.",
+  "rca_of_the_issue": "Flyer upload: /app/frontend/src/lib/imageCompress.js compressImageToDataURL() resolves to {dataUrl, bytes, chars, quality, cap, ok}. /app/frontend/src/components/FlyerUploader.jsx line 14 passes that object straight to onChange, so Events.jsx draft.image_url is an object: <img src={value}> serializes to '[object Object]' (verified: preview src length 15) and POST /api/events sends image_url:{...} -> FastAPI 422 string_type. Events.jsx submit() then calls toast.error(e.response.data.detail) with the 422 detail ARRAY of error objects, which React refuses to render -> 'Objects are not valid as a React child (found: object with keys {type, loc, msg, input, url})' uncaught error that unmounts the page (blank screen + dev overlay), so the user loses the whole form. Reproduced twice; the identical flow without a flyer creates, edits and cancels events perfectly."
+}

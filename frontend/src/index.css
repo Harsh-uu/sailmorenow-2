@@ -1,0 +1,336 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import url("https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800;900&family=Montserrat:wght@300;400;500;600;700&display=swap");
+
+:root {
+  color-scheme: light;
+  --smn-navy: #1F3F5B;
+  --smn-navy-dark: #152a3d;
+  --smn-teal: #55B3AD;
+  --smn-teal-dark: #438f8a;
+  --smn-orange: #F2A03B;
+  --smn-orange-dark: #d98c30;
+  --smn-bg: #F7FAFC;
+  --smn-band-alt: #FFFFFF;
+  --smn-surface: #FFFFFF;
+  --smn-border: #E2E8F0;
+
+  /* Semantic TEXT scale (light). Each step is chosen for WCAG AA+ on the
+     light surfaces above. Prefer these over ad-hoc slate-XXX utilities. */
+  --smn-text: #0F172A;            /* primary body / strong          ~16.1:1 */
+  --smn-text-secondary: #334155;  /* secondary body                 ~10.8:1 */
+  --smn-text-tertiary: #475569;   /* supporting / labels             ~8.0:1 */
+  --smn-text-muted: #64748B;      /* captions, timestamps            ~5.4:1 */
+  --smn-text-disabled: #94A3B8;   /* disabled UI only (WCAG-exempt)   ~2.6:1 */
+  --smn-text-placeholder: #5B6B82;/* form placeholders               ~5.4:1 */
+  --smn-heading: #1F3F5B;         /* display headings (navy)                */
+  --smn-link: #2F8078;            /* inline links (teal-dark)               */
+  --smn-on-accent: #10233A;       /* text on orange/teal fills              */
+
+  /* Unified icon system tones (see components/Icon.jsx). Light values. */
+  --icon-default: #1F3F5B;
+  --icon-muted: #5B6B82;
+  --icon-accent: #B45309;
+  --icon-brand: #2A7871;
+  --icon-hover: #152A3D;
+  --icon-on-accent: #10233A;
+  --icon-disabled: #CBD5E1;
+
+  /* Back-compat aliases (older components read these). */
+  --smn-ink: var(--smn-text);
+  --smn-muted: var(--smn-text-muted);
+}
+
+html.dark {
+  color-scheme: dark;
+  --smn-bg: #0B1220;              /* app background (near-navy black)        */
+  --smn-band-alt: #131E30;
+  --smn-surface: #1B2740;         /* cards — lifted off the bg               */
+  --smn-border: #2C3A52;
+
+  /* Semantic TEXT scale (dark). Tuned so NO step drops below AA on either
+     --smn-bg (#0B1220) or --smn-surface (#1B2740). Warm-neutral slates keep
+     it easy on the eyes vs pure white, which glares on dark. */
+  --smn-text: #EEF3F9;            /* primary body / strong    ~15.6:1 / 12.3:1 */
+  --smn-text-secondary: #CBD7E6;  /* secondary body           ~11.4:1 / 9.0:1  */
+  --smn-text-tertiary: #AAB9CE;   /* supporting / labels       ~7.4:1 / 5.8:1  */
+  --smn-text-muted: #93A3BC;      /* captions, timestamps      ~5.4:1 / 4.6:1  */
+  --smn-text-disabled: #64748B;   /* disabled                                   */
+  --smn-text-placeholder: #93A3BC;/* form placeholders         ~5.4:1 / 4.6:1   */
+  --smn-heading: #F4F8FC;         /* display headings become near-white         */
+  --smn-link: #6FD7CF;            /* links lighten for dark                      */
+  --smn-on-accent: #0B1220;
+
+  /* Unified icon system tones — dark. */
+  --icon-default: #EEF3F9;
+  --icon-muted: #93A3BC;
+  --icon-accent: #F2A03B;
+  --icon-brand: #7FCAC4;
+  --icon-hover: #FFFFFF;
+  --icon-on-accent: #10233A;
+  --icon-disabled: #45566F;
+
+  --smn-ink: var(--smn-text);
+  --smn-muted: var(--smn-text-muted);
+}
+
+html, body, #root {
+  height: 100%;
+  overflow-x: clip;              /* kill any stray horizontal page scroll   */
+  background: var(--smn-bg);
+  color: var(--smn-ink);
+  font-family: "Montserrat", ui-sans-serif, system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+.font-display { font-family: "Poppins", ui-sans-serif, system-ui, sans-serif; }
+
+/* Semantic heading utility — one place to control display-heading color
+   in both themes. Prefer this over hard-coded `text-[#1F3F5B]` so future
+   dark-mode components can't drift. */
+.smn-heading { color: var(--smn-navy); }
+html.dark .smn-heading { color: var(--smn-heading); }
+
+/* ------------------------------------------------------------------ *
+ * DARK MODE READABILITY REPAIR
+ * The codebase has ~450 hard-coded light-theme text utilities
+ * (text-slate-500/600/700/900, text-[#1F3F5B], text-[#475569], …) that
+ * never flipped for dark mode, so copy rendered near-black on a near-black
+ * background. These rules remap each hard-coded step to the semantic dark
+ * TEXT scale above. `html.dark .x` (0,2,0) outranks the bare utility (0,1,0),
+ * so the hierarchy is preserved without touching every component.
+ * ------------------------------------------------------------------ */
+html.dark .text-slate-900,
+html.dark .text-slate-800,
+html.dark .text-\[\#0F172A\],
+html.dark .text-\[\#0f172a\],
+html.dark .text-\[\#152a3d\],
+html.dark .text-\[\#1F3F5B\],
+html.dark .text-\[\#1f3f5b\] { color: var(--smn-heading); }
+
+html.dark .text-slate-700,
+html.dark .text-gray-800,
+html.dark .text-gray-700 { color: var(--smn-text); }
+
+html.dark .text-slate-600,
+html.dark .text-\[\#475569\],
+html.dark .text-gray-600 { color: var(--smn-text-secondary); }
+
+html.dark .text-slate-500,
+html.dark .text-\[\#64748B\],
+html.dark .text-\[\#64748b\],
+html.dark .text-gray-500 { color: var(--smn-text-tertiary); }
+
+html.dark .text-slate-400,
+html.dark .text-gray-400 { color: var(--smn-text-muted); }
+
+/* Hover variants of the same drifted utilities. */
+html.dark .hover\:text-slate-900:hover,
+html.dark .hover\:text-slate-800:hover,
+html.dark .hover\:text-\[\#1F3F5B\]:hover { color: var(--smn-heading); }
+html.dark .hover\:text-slate-700:hover,
+html.dark .hover\:text-slate-600:hover { color: var(--smn-text); }
+
+/* Inputs & placeholders: keep typed text bright and hints legible. */
+html.dark input,
+html.dark textarea,
+html.dark select { color: var(--smn-text); }
+/* Bare text-like inputs (no explicit bg utility) rendered UA-white on dark.
+   color-scheme:dark above already helps, but pin an explicit dark surface +
+   border so a field like the @-handle input can never paint light-on-light. */
+html.dark input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=color]),
+html.dark textarea {
+  background-color: var(--smn-surface);
+  border-color: var(--smn-border);
+}
+/* Accessible placeholders in both themes (raw slate-400 was 2.6:1 → fail). */
+::placeholder { color: var(--smn-text-placeholder); opacity: 1; }
+html.dark ::placeholder { color: var(--smn-text-placeholder); opacity: 1; }
+
+/* --- Contrast guards (WCAG AA) — stop low-contrast brand pairings creeping in.
+   White on the orange/teal fills fails AA (2.1–2.5:1); force the accessible
+   dark ink (--smn-on-accent #10233A = 7.45:1 on orange, 6.4:1 on teal). The
+   compound selector only matches elements that carry BOTH classes (buttons,
+   badges), so icons and non-brand fills are untouched. */
+.bg-\[\#F2A03B\].text-white,
+.bg-\[\#f2a03b\].text-white,
+.bg-\[\#55B3AD\].text-white,
+.bg-\[\#55b3ad\].text-white { color: #10233A !important; }
+/* Teal used as text/icon on light backgrounds (#55B3AD = 2.5:1) → deepen to the
+   accessible link teal (#2F8078 = 4.7:1, ≥3:1 for non-text). Dark mode remaps. */
+html:not(.dark) .text-\[\#55B3AD\],
+html:not(.dark) .text-\[\#55b3ad\] { color: #2F8078; }
+
+
+/* Surfaces: many cards/rows hard-code light backgrounds (bg-white, bg-slate-50/100)
+   with no dark: variant. With the text remap above, light-on-light became
+   white-on-white. Remap those surfaces to the dark palette so the (now light)
+   text sits on a proper dark card. Translucent (bg-white/10) classes are a
+   different selector and are intentionally left untouched. */
+html.dark .bg-white { background-color: var(--smn-surface); }
+html.dark .bg-slate-50,
+html.dark .bg-slate-100,
+html.dark .bg-gray-50,
+html.dark .bg-gray-100 { background-color: var(--smn-band-alt); }
+html.dark .border-slate-100,
+html.dark .border-slate-200 { border-color: var(--smn-border); }
+
+/* Brand CTA contrast: white-on-orange (#F2A03B) was ~2.1:1. Dark ink on the
+   brand orange lifts it to ~6.5:1 (WCAG AA) in BOTH themes. Unlayered so it
+   beats the Tailwind text-white utility without !important. */
+.bg-\[\#F2A03B\],
+.bg-\[\#F2A03B\]:hover,
+.hover\:bg-\[\#F2A03B\]:hover,
+.bg-\[\#d98c30\],
+.bg-\[\#d98c30\]:hover { color: #10233A; }
+.bg-\[\#F2A03B\] svg,
+.bg-\[\#d98c30\] svg { color: currentColor; }
+
+/* Shadcn base tokens mapped to brand */
+@layer base {
+  :root {
+    --background: 210 33% 97%;
+    --foreground: 222 47% 11%;
+    --card: 0 0% 100%;
+    --card-foreground: 222 47% 11%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 222 47% 11%;
+    --primary: 210 49% 24%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 175 37% 61%;
+    --secondary-foreground: 210 49% 24%;
+    --muted: 210 25% 95%;
+    --muted-foreground: 215 20% 40%;
+    --accent: 32 87% 59%;
+    --accent-foreground: 0 0% 100%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 214 32% 91%;
+    --input: 214 32% 91%;
+    --ring: 210 49% 24%;
+    --radius: 0.75rem;
+  }
+  .dark {
+    --background: 222 43% 8%;
+    --foreground: 210 40% 96%;
+    --card: 219 41% 18%;
+    --card-foreground: 210 40% 96%;
+    --popover: 219 41% 18%;
+    --popover-foreground: 210 40% 96%;
+    --primary: 175 45% 64%;
+    --primary-foreground: 222 47% 10%;
+    --secondary: 217 33% 25%;
+    --secondary-foreground: 210 40% 96%;
+    --muted: 217 33% 22%;
+    --muted-foreground: 215 25% 72%;
+    --accent: 32 87% 59%;
+    --accent-foreground: 222 47% 10%;
+    --destructive: 0 74% 63%;
+    --destructive-foreground: 210 40% 96%;
+    --border: 218 30% 25%;
+    --input: 218 30% 25%;
+    --ring: 175 45% 64%;
+  }
+}
+
+/* Marketing hero — navy band with soft radial glows behind the H1. The
+   dark-mode variant deepens to near-black so the whole page still reads as
+   layered rather than flat when the theme flips. */
+.smn-hero {
+  /* Solid #17324a at both edges so wave dividers (filled #17324a) match exactly;
+     accent glows are kept away from the bottom edge. */
+  background:
+    radial-gradient(1000px 400px at 90% -10%, rgba(85,179,173,0.28), transparent 60%),
+    radial-gradient(800px 360px at 0% 30%, rgba(242,160,59,0.18), transparent 60%),
+    linear-gradient(180deg, #17324a 0%, #1F3F5B 50%, #17324a 92%, #17324a 100%);
+}
+html.dark .smn-hero {
+  background:
+    radial-gradient(1000px 400px at 90% -10%, rgba(85,179,173,0.22), transparent 60%),
+    radial-gradient(800px 360px at 0% 30%, rgba(242,160,59,0.14), transparent 60%),
+    linear-gradient(180deg, #020617 0%, #0b1626 50%, #020617 92%, #020617 100%);
+}
+
+/* Alternating body bands — Band A is the "off-white" section, Band B is the
+   pure surface. Dark-mode inverts them so cards still pop off the page. */
+.smn-band-a { background: var(--smn-bg); }
+.smn-band-b { background: var(--smn-band-alt); }
+
+/* Reusable card surface so we don't sprinkle bg-white dark:bg-slate-800 on
+   every marketing card. */
+.smn-card {
+  background: var(--smn-surface);
+  border: 1px solid var(--smn-border);
+}
+
+/* Ken Burns pan/zoom for the landing hero poster — 12-second slow drift
+   so the water feels alive even before the video finishes decoding, or
+   when the video source is absent. Halved from 24 s so the motion sits
+   closer to the video's own rhythm and reads as one continuous piece. */
+@keyframes smn-hero-pan {
+  0%   { transform: scale(1.05) translate3d(0, 0, 0); }
+  50%  { transform: scale(1.12) translate3d(-2%, -1%, 0); }
+  100% { transform: scale(1.05) translate3d(0, 0, 0); }
+}
+.hero-kenburns { animation: smn-hero-pan 12s ease-in-out infinite; }
+
+/* Vignette that breathes at roughly wake-cadence (4.4 s) — a soft
+   navy radial darkens the edges on each pulse so the video reads as
+   part of the hero band instead of a bright rectangle sitting on it. */
+@keyframes smn-hero-vignette {
+  0%   { opacity: 0.28; }
+  50%  { opacity: 0.5;  }
+  100% { opacity: 0.28; }
+}
+.hero-vignette {
+  background: radial-gradient(120% 100% at 50% 50%, transparent 55%, rgba(6, 15, 28, 0.85) 100%);
+  animation: smn-hero-vignette 4400ms ease-in-out infinite;
+}
+
+/* Respect the OS "Reduce Motion" setting app-wide — neutralise every CSS
+   animation and transition (hero pan/vignette, staggered reveals, hover
+   transforms, the LiveNow pulse, etc.) for users sensitive to animation. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    transition-delay: 0ms !important;
+    scroll-behavior: auto !important;
+  }
+  .hero-kenburns { animation: none !important; }
+  .hero-vignette { animation: none !important; opacity: 0.28 !important; }
+}
+
+.tier-ribbon {
+  clip-path: polygon(0 0, 100% 0, 92% 100%, 0% 100%);
+}
+
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar { scrollbar-width: none; }
+
+.star-empty { color: #cbd5e1; }
+.star-full  { color: var(--smn-orange); }
+
+/* Keyboard focus visibility (WCAG 2.4.7). Pointer clicks stay ring-free via
+   :focus:not(:focus-visible); keyboard tabbing shows a clear brand-teal ring.
+   !important guarantees it beats the app's many Tailwind `outline-none`
+   utilities so no interactive element can be un-focusable via keyboard. */
+:focus:not(:focus-visible) { outline: none; }
+:focus-visible {
+  outline: 3px solid var(--smn-teal) !important;
+  outline-offset: 2px !important;
+  border-radius: 4px;
+}
+html.dark :focus-visible { outline-color: #6FD7CF !important; }
+
+/* Event calendar: force DayPicker's table to flow as blocks so the 7-col grid
+   rows can shrink to the card width on phones instead of overflowing. */
+[data-testid="event-calendar"] table,
+[data-testid="event-calendar"] thead,
+[data-testid="event-calendar"] tbody { display: block; width: 100%; }
+[data-testid="event-calendar"] .rdp-months,
+[data-testid="event-calendar"] .rdp-month { width: 100%; max-width: 100%; }
+[data-testid="event-calendar"] .rdp { --rdp-cell-size: auto; margin: 0; }

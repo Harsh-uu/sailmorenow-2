@@ -1,0 +1,31 @@
+{
+  "summary": "Iter 69 — PHASE-2 paywall enforcement + tiers regression. Backend pytest: 17/17 green (test_iter69_phase2_gating.py) covering 402 upgrade_required on POST /api/posts, /api/posts/{id}/comments, /api/reactions, /api/messages/{rid}, /api/review-sessions for a FREE user and 2xx for a PAID user (crew.alex@sailmorenow.dev bumped to premium); free 'partner' event gating (regular=402 upgrade_required, is_volunteer=true=200, community_partner=200); GET /api/payments/packages exposes owner_premium_{1,3,6,12} audience=boat_owner monthly=6.99; POST /api/payments/checkout package_id=owner_premium_1 returns a Stripe test-mode url; POST /api/admin/community-partner/activate sets subscription_tier='community_partner' (persistence verified via mongosh) and reverts to 'free', and returns 404 for unknown emails; GET /api/admin/contact annotates each message with an account object and includes subject. WEB: role=partner and role=boat_owner deeplinks pre-select role-card-<key> (all 4 keys checked in code, 2 verified live). Pricing page for logged-in Boat Owner (audience-sailor tab) renders 'BOAT OWNER PREMIUM' + $6.99 (screenshot captured). api.js central paywall interceptor emits toast label 'See plans' (verified via source at /app/frontend/src/lib/api.js:21; live-triggering the interceptor requires the app-internal axios path and was not exercised, but the 402 payload from the shared backend is verified). Admin /admin/contact as jenn@sailmorenow.com: contact-filter-all + contact-filter-partner buttons present, contact-subject-<id> badge present, partner-activate-<id> block present (partner-activate-btn/deactivate-btn testids render conditionally when an account exists for the inquiry email — none of the 4 live Community Partner inquiries have matching accounts yet, so the buttons are hidden by design; the activation flow itself is exercised in backend tests). MOBILE: all 4 role deeplinks (path-card-boat_owner/partner/sailor/boat_pro) pre-select the correct card via ?role= query param; app/index.tsx reads it via useLocalSearchParams. ApiError.message uses detail.message from the backend UPGRADE_REQUIRED payload verbatim (verified via /app/mobile/src/lib/api.ts:37-43,71-73).",
+  "platforms_tested": ["web", "mobile"],
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "web": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+    "mobile": {"ui_bugs": [], "integration_issues": [], "design_issues": [], "react_native_issues": []}
+  },
+  "parity_issues": [],
+  "test_report_links": [
+    "/app/backend/tests/test_iter69_phase2_gating.py",
+    "/app/test_reports/pytest/iter69_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "AdminContact.jsx: partner-activate-btn / partner-deactivate-btn only render when acct exists (line 107-124). This is correct product behavior but means integration tests must first ensure a matching user account before those testids appear — worth documenting for future test agents.",
+    "Landing.jsx uses useSearchParams() and scrolls the find-your-place section into view on ?role=<key> — nice UX; parity with mobile is good (mobile uses useLocalSearchParams from expo-router). Consider extracting ROLE_PATHS to a shared JSON to keep web/mobile card copy locked together.",
+    "deps.py is_paid_subscriber treats ANY non-'free' tier as paid — so a legacy 'basic' Boat Pro also passes require_interaction. That matches spec ('any paid tier') but note that if you ever add promotional/trial tiers, they will inherit interaction access unless explicitly excluded.",
+    "community_router.py POST /api/events runs rate_limit BEFORE the paywall check (line 210-217). This means a spammy free partner can still burn the 10/hour bucket on regular-event attempts that all 402. Consider moving the paywall check before rate_limit if this becomes a problem.",
+    "Pricing.jsx: `premiumLabel` is only rendered on the sailor/owners audience tab. The current default `audience='boat_pro'` means a boat_owner landing on /pricing sees the Boat Pro tiers first and must manually switch. Consider defaulting `audience` from `user.account_type` (sailor/boat_owner → 'sailor', else 'boat_pro').",
+    "reactions_router.py ReactionBody uses `value:int` (1/-1/0). Any client that sends `emoji`/`kind`/`type` will 422 — worth documenting in the API contract since the test request initially used `emoji`."
+  ],
+  "updated_files": ["/app/backend/tests/test_iter69_phase2_gating.py"],
+  "success_rate": {"backend": "100% (17/17 pytest)", "frontend": "web 6/7 assertions verified live (toast label verified via source); mobile 4/4 role deeplinks verified"},
+  "test_credentials": "Admin: jenn@sailmorenow.com / [REDACTED]. Free user: registered ephemeral test.iter69ui*@example.com (cleaned via TEST_iter69_ pattern in fixture). Paid user: crew.alex@sailmorenow.dev (bumped to subscription_tier='premium' during the run — this is a seeded shared account so it remains premium after the tests; revert with mongosh if you need it 'free' again).",
+  "seed_data_creation": "Test users prefixed TEST_iter69_ (auto-cleaned in module teardown). One contact_messages doc with id TEST_iter69_* (auto-cleaned). Note: crew.alex@sailmorenow.dev tier left as 'premium' from the paid_user fixture — reset via db.users.updateOne({email:'crew.alex@sailmorenow.dev'},{$set:{subscription_tier:'free'}}) if desired.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Phase-2 gating is clean. If retesting admin partner activate via UI, first register a partner account matching one of the 4 existing Community Partner inquiries (e.g. test_mobpartner@example.com or test_webpartner@example.com as account_type='partner') — only then will partner-activate-btn-<id> render. Backend fixture crew.alex@sailmorenow.dev is left at premium tier. mongosh queries must use LOWERCASE emails (backend stores emails lowercase). Reactions schema uses `value:int (1/-1/0)`, not `emoji`. Posts schema requires `type` + `title` in addition to body/market.",
+  "rca of the issue": "N/A — no bugs found."
+}

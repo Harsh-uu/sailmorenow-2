@@ -1,0 +1,56 @@
+{
+  "summary": "Iteration 25 (Phase K) e2e test of the 4 new features. Found and repaired one CRITICAL regression: the `@router.get(\"/admin/analytics\")` decorator had been deleted when the new `/search` handler was inserted into admin_router.py, so `/api/admin/analytics` was completely unregistered (404) and the whole /admin/analytics page — including the new digest Send-Now card — rendered only 'Failed to load'. Decorator restored (route-registration fix only, no logic change). After that: 27/27 new backend pytest cases green in /app/backend/tests/test_iter25.py covering (a) GET /api/admin/reports insights — 401/403 gates, full shape, exactly 8 weekly buckets, roll-up across open/resolved/dismissed verified by +3 delta, insights identical across status=open/resolved/all, [deleted] preview for missing targets; (b) POST /api/admin/digest/send-now — 401 unauth, 403 non-admin, dry_run default true, shape {dry_run,would_send,markets_considered,as_of}, eligible-user counted then excluded once digest_sent_at is inside the 6-day window, dry_run=false stamps digest_sent_at and a second immediate run does NOT re-stamp (claim guard verified); (c) mentions — PUSH_KINDS contains 'mention', @Alexqa resolves + persists mentioned_user_ids + creates notifications row kind='mention', case-insensitive (@ZOEQUA), self-mention excluded, no-mention/unknown-mention no-ops; (d) GET /api/search — public 200 without auth, <2-char and missing q return empty buckets, 5-per-bucket limit, case-insensitive match on post title/body, discussion title, event location, no _id leakage, regex metachars escaped. Frontend verified on the public preview URL: /admin/reports renders reports-insights + reports-weekly-chart (8 bars with title tooltips) + reports-top-targets (x10 POST with preview); /admin/analytics renders digest-send-now, Send-now is disabled until a successful Dry-run then becomes enabled, digest-dry-run-result shows '0 users would receive a digest right now (2 markets considered).'; PostComments renders @Alexqa as data-testid='mention-token' and the mentioned user got a real notifications row (verified in mongo); Header TopSearch — icon shown only when signed in, panel opens, 1-char shows hint, 'sail' returns Feed/Discussion/Event sections, Escape closes, and discussion -> /community-hub/<id>, post -> /feed, event -> /events navigation all work. Full regression: 417 passed / 6 failed (all pre-existing WS-concurrency + push-VAPID + webhook-secret env tests, unrelated to Phase K).",
+  "backend_issues": {
+    "critical": [
+      {"endpoint": "GET /api/admin/analytics", "issue": "ROUTE WAS UNREGISTERED — the `@router.get(\"/admin/analytics\")` decorator was removed when the new `/search` endpoint was inserted at admin_router.py:143, leaving `async def admin_analytics` as a bare module-level function. /api/admin/analytics returned 404 and the entire AdminAnalytics page (incl. the new Send-Now card) showed 'Failed to load'. I restored the decorator + PEP8 blank lines to unblock testing — please review/keep the fix.", "priority": "CRITICAL"}
+    ],
+    "minor": [
+      {"endpoint": "POST /api/posts/{id}/comments", "issue": "Mention fan-out is not limited to 'top 5 per token' as specced. The handler builds one $or of all tokens and calls .to_list(20), so a single `@Broadxx` matching 7 users notified all 7 (verified). A short token like `@Al` can push-notify up to 20 unrelated members — notification-spam / info-leak risk. Enforce a per-token limit (5) and a minimum token length."},
+      {"endpoint": "POST /api/admin/digest/send-now?dry_run=true", "issue": "Docstring (and the user-facing UI copy) claim dry-run 'bypasses the 6-day dedupe window', but the code DOES skip users whose digest_sent_at is within 6 days (line 100-101). Behaviour is correct/desirable; the docstring and the AdminAnalytics card text are wrong and misleading."},
+      {"endpoint": "GET /api/admin/reports", "issue": "Insights add 8 sequential count_documents + 1 aggregate + up to 5 target lookups to EVERY queue load, on top of the existing N+1 target hydration (up to 500 docs). Consider a single $facet/date-bucket aggregation."},
+      {"endpoint": "GET /api/admin/reports", "issue": "Weekly bucket boundaries are 'now'-relative (now-6d..now), not calendar-week aligned, so `week_start` labels shift with the request time and never line up with the Sunday digest week. Cosmetic but confusing for admins."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "AdminReports weekly chart", "issue": "Bars are NOT proportional to counts. The bar div uses `style={{height: '<pct>%'}}` but its parent is `flex flex-col items-center gap-1` with auto height (only the outer wrapper has h-24), so the percentage resolves against an auto-height parent and collapses to `minHeight`. Measured: counts [0,0,1,0,3,0,2,4] all rendered at ~4px — a count of 1 and a count of 4 look identical, making the chart useless. Fix: add `h-full` to the per-bar column (and give the bar a flex-1 track), e.g. `<div className=\"flex-1 h-full flex flex-col items-center justify-end gap-1\">`.", "selector": "[data-testid=\"reports-weekly-chart\"] > div > div", "priority": "HIGH"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "AdminAnalytics — digest-send-now card", "issues": ["Card copy says Dry-run 'bypasses the 6-day dedupe window' which contradicts actual behaviour (dedupe IS applied) — an admin will misread a low count as a bug.", "'Send now' is styled as a solid orange primary button even while disabled, so it does not read as disabled before a dry-run (it is correctly `disabled` in the DOM — verified — but there is no visual disabled state)."]},
+      {"screen": "PostComments mention token", "issues": ["Mention token uses `text-[#1F3F5B]` (navy, computed rgb(31,63,91)) on slate-700 body text — spec asked for blue; at a glance the mention is nearly indistinguishable from normal text. Use a clearly distinct blue (e.g. text-sky-600) and/or make it a link to the mentioned profile."]},
+      {"screen": "AdminReports insights", "issues": ["No empty state for the weekly chart when all 8 buckets are 0 — renders 8 invisible 2px slivers with no 'No reports yet' message."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter25.py",
+    "/app/backend/tests/seed_iter25_ui.py",
+    "/app/test_reports/pytest/iter25.xml"
+  ],
+  "action_items": [
+    "KEEP/REVIEW my restoration of `@router.get(\"/admin/analytics\")` in /app/backend/routers/admin_router.py (line ~144) — without it the whole analytics page is dead. Add a smoke assertion so route-registration regressions are caught.",
+    "Fix AdminReports weekly chart bar heights: the per-bar flex column needs `h-full` (percentage heights currently resolve against an auto-height parent, so all bars are ~4px).",
+    "Limit mention resolution to top 5 users PER token (currently up to 20 total, all notified) and require a longer minimum token to prevent mass mention-notification spam.",
+    "Correct the dry-run copy in AdminAnalytics + the send-now docstring: dry-run DOES honour the 6-day dedupe window.",
+    "Add a visual disabled state to the 'Send now' button and an empty state to the weekly chart."
+  ],
+  "critical_code_review_comments": [
+    "admin_router.py: the missing-decorator regression was invisible because nothing tests route presence. `/api/search` is also declared inside a file whose other routes are all `/admin/*` — consider moving public search into its own router so an edit near an admin handler cannot silently orphan one.",
+    "community_router.py mention block swallows all exceptions with a broad try/except around the whole parse; a bad regex or DB error would silently drop mentions with only a log line. Acceptable for a side-effect, but the notify loop already has its own guard so the outer catch can be narrowed.",
+    "admin_router send-now dry-run iterates every opted-in user and calls compute_digest_payload per uncached market — O(users) with an unbounded cursor; fine now (15 users) but should be batched by market before user iteration.",
+    "reports_router insights: `$last: \"$reason\"` in a $group without a preceding $sort on created_at means `last_reason` is arbitrary document order, not the most recent reason. Add {$sort:{created_at:1}} before the $group.",
+    "AdminReports.jsx uses an IIFE `{(() => {...})()}` inside JSX for the chart — extract to a small <WeeklyChart/> component for readability/testability."
+  ],
+  "updated_files": [
+    "/app/backend/routers/admin_router.py (restored missing @router.get(\"/admin/analytics\") decorator)",
+    "/app/backend/tests/test_iter25.py (new)",
+    "/app/backend/tests/seed_iter25_ui.py (new)"
+  ],
+  "success_rate": {"backend": "100% (27/27 iter25 cases) after the analytics route fix; full suite 417/423", "frontend": "94% — all 4 features functional; 1 HIGH chart-rendering bug"},
+  "seed_data_creation": "All data prefixed TEST_iter25<worker>_ / TEST_iter25ui_ (users, sessions, posts, comments, discussions, reports across 4 week-buckets, events, notifications). Fully cleaned up — verified 0 leftovers in users/reports/events/notifications.",
+  "should_call_test_agent_after_fix": true,
+  "should_main_agent_self_test": false,
+  "test_credentials": "No passwords (Emergent Google OAuth). Sessions minted directly in mongo — run `python /app/backend/tests/seed_iter25_ui.py` for admin/author/mention-target tokens, `CLEANUP=1 python ...` to remove.",
+  "context_for_next_testing_agent": "test_iter25.py notes: (1) POST /api/posts and /api/discussions validate `market` against the real PNW market list — use POST_MARKET='Greater Seattle'; a synthetic market returns 400 'Invalid market'. (2) Digest eligibility needs new_crew/new_events/new_comments in the market — a post alone is NOT enough, use the seed_market_event() helper which inserts an upcoming event. (3) Keep the RUN prefix keyed on PYTEST_XDIST_WORKER and do the pre-clean inside the `api` fixture (not a later fixture) or one fixture's cleanup wipes users another fixture already created. (4) Known-flaky under xdist load: iter22/iter23 WS multi-socket tests (server rejects WS handshake with 403 under concurrency) and iter24 TestAnalytics::test_counts_reflect_new_report — both pass in isolation. iter20 push-test and iter21/22 Resend-webhook-secret failures are env-key dependent and pre-existing.",
+  "rca_of_the_issue": "Analytics 404: in admin_router.py the new `@router.get(\"/search\")` handler was pasted immediately above `async def admin_analytics(...)` and consumed the line that held `@router.get(\"/admin/analytics\")` (no blank lines separated them: `return {...}` on 143 was followed directly by `async def admin_analytics` on 144). FastAPI therefore never registered the path — confirmed absent from /openapi.json — and AdminAnalytics.jsx's catch set `err`, short-circuiting the render before the new digest-send-now card. Chart bug RCA: CSS percentage heights need a definite-height containing block; `h-24` is on the row, while each bar's parent column is auto-height, so `height:100%` is indefinite and only `minHeight` (2/4px) applies."
+}

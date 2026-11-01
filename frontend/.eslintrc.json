@@ -1,0 +1,21 @@
+{
+  "rules": {
+    "no-restricted-imports": [
+      "error",
+      {
+        "paths": [
+          {
+            "name": "lucide-react",
+            "message": "Do not import lucide-react directly. Import { Icon } from @/components/Icon and use a semantic name (e.g. <Icon name=\"boatPro\" />). Full list: docs/ICONS.md. Exempt: the Icon wrapper, shadcn ui/, and lib/eventCategories.js."
+          }
+        ]
+      }
+    ]
+  },
+  "overrides": [
+    {
+      "files": ["src/components/Icon.jsx", "src/components/ui/**", "src/lib/eventCategories.js"],
+      "rules": { "no-restricted-imports": "off" }
+    }
+  ]
+}

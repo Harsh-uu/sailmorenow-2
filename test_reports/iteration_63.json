@@ -1,0 +1,31 @@
+{
+  "summary": "RETEST of iteration_62 HIGH dark-mode background regression on web. The companion `html.dark .bg-white / .bg-slate-50 / .bg-slate-100 / .bg-gray-50 / .bg-gray-100 { background: var(--smn-surface|--smn-band-alt) }` + `html.dark .border-slate-100/.border-slate-200 { border-color: var(--smn-border) }` block in /app/frontend/src/index.css (lines 119-130) resolves ALL three prior HIGH regressions: (1) Boat Pro detail card on /directory/seed_rigging now renders on #1B2740 with light heading/text; (2) the three review cards below also flip to the dark surface; (3) the landing top-nav 'Sign in' button (bg-white text-[#1F3F5B]) is now legible (dark button, light label). Verified by sampling every `.bg-white` node on the page — computed background-color = rgb(27, 39, 64) i.e. --smn-surface, exactly as designed. Light-mode regression check: with localStorage smn-theme='light' and html.class='', every `.bg-white` still computes to rgb(255,255,255) and the pages look visually identical to pre-fix — the overrides are correctly scoped to `html.dark`. Translucent overlays (bg-white/85 header, bg-white/10 nav bands, bg-white/xx hero cards) are untouched because the utility Tailwind class names (`.bg-white\\/85`, `.bg-white\\/10`) do not match the `.bg-white` selector. Header on / stays bg-transparent border-white/10 in dark mode as intended. Low-contrast findings that remain in the automated sweep are measurement artifacts (my luminance calc treats translucent white as opaque white so bg-white/10 on the navy hero LOOKS bad numerically but is fine visually) or pre-existing brand-color choices (white label on #F2A03B orange, ~2.13:1) which are not in scope of this fix and were the same in light mode.",
+  "platforms_tested": ["web"],
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "web": {
+      "ui_bugs": [],
+      "integration_issues": [],
+      "design_issues": [
+        {"screen": "Brand-orange CTAs (pre-existing, out of scope)", "issues": ["`bg-[#F2A03B] text-white` buttons (Join the community, Direct message, Create free account, Checkout with Stripe, Sign up with Google) compute ~2.13:1 in both themes. Not caused by this fix; would need to darken the label or the fill to reach 4.5:1. Consider `text-[#0B1220]` on orange for AA."]},
+        {"screen": "/events DayPicker (pre-existing)", "issues": ["Disabled/outside dates render `text-slate-600` on `#1B2740` (~1.96:1). Intentionally faded but below AA; if AA is required for calendars, remap disabled color via a DayPicker className override rather than the global text-slate scale."]}
+      ]
+    }
+  },
+  "parity_issues": [],
+  "test_report_links": [],
+  "action_items": [
+    "None required for this regression — iteration_62 HIGH items are all fixed.",
+    "(Optional, pre-existing) Improve contrast of white label on brand-orange CTA buttons if WCAG AA is desired."
+  ],
+  "critical_code_review_comments": [
+    "The final index.css remap now covers both text AND background utilities in `html.dark`, exactly the pattern suggested in the prior report. Because the selectors are bare class selectors (0,1,0) namespaced under `html.dark` (0,2,0), they cleanly outrank the Tailwind utilities without touching per-component code. Escaped translucent variants like `.bg-white\\/85` and `.bg-white\\/10` correctly do NOT match `.bg-white`, so translucent header/hero overlays continue to work — good separation."
+  ],
+  "updated_files": [],
+  "success_rate": {"frontend": "100%"},
+  "seed_data_creation": "None.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Iteration_62 HIGH dark-mode background regression is fully resolved as of index.css lines 119-130. Verified on / (Sign in button legible), /directory/seed_rigging (main pro card + review cards now on #1B2740 with light text), /community-hub, /events, /pricing, /register. Light-mode is untouched. Translucent bg-white/xx overlays are intentionally preserved. If future testing wants a stricter WCAG sweep, note that the current automated luminance script does NOT account for CSS alpha channels — treat any low-contrast result involving `bg-white/N` or `bg-slate-*/N` as suspect and visually reverify before filing.",
+  "rca of the issue": "Not applicable — this iteration was a retest of a fix. Fix confirmed working. Root cause of the original bug (see iteration_62): text-only html.dark overrides lightened foreground while leaving hard-coded `bg-white` backgrounds white; the companion background-utility overrides added in this iteration close the loop."
+}

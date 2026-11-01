@@ -1,0 +1,30 @@
+{
+  "summary": "Iter 71 — Phase 4 (Clubs directory + Founding Wall + Renewal reminder + Win-back scheduler) regressed on both platforms. Backend pytest: 6/6 green (test_iter71_phase4.py). Verified: (1) GET /api/partners returns 4 orgs with partner_badge field on each; ordering enforced founding→partner→null then by name (verified in-flight ranks are sorted). Market filter narrows to Greater Seattle. (2) GET /api/founding-partners returns 1 active founder (pugetsoundsailingsoc, global cohort). Global cohort sorts before seattle. (3) Founding cohort caps verified via mongosh: GLOBAL=1 (≤5), SEATTLE=0 (≤5). (4) POST /api/contact with subject 'Community Partner renewal' returns {ok:true} (200). (5) scheduler._nightly_job(db) invoked directly with a seeded lapsed premium user + a seeded community_partner expiring in 15d: no exceptions; winback_sent_for = past expiry timestamp is written, lapsed user auto-downgraded to 'free'; renewal_notified_for = future expiry timestamp is written, partner_renewal notify() row created; second nightly run is idempotent (no duplicate notif). WEB: /clubs (data-testid=clubs-page) lists 4 club-card-<handle> — founding badge on pugetsoundsailingsoc, community-partner badge on iter69org, and 2 unbadged orgs in trailing positions. Header nav has 'Clubs & Orgs' link → /clubs. Landing renders data-testid=founding-wall with founder-pugetsoundsailingsoc. Dashboard for community_partner (partner.psss) with subscription_expires 15d out shows the amber renewal-reminder banner ('Your Community Partner term ends in 15 days'), with functional renewal-contact-btn + renewal-dismiss. MOBILE: Directory tab header exposes directory-clubs-link → app/clubs renders testID=clubs-list with 4 club-card-<handle> (founding badge on the first). Unauthenticated home renders testID=founding-wall with founder-pugetsoundsailingsoc (screenshot confirms). Feed tab (as community_partner within 30d) shows testID=renewal-reminder with renewal-contact-btn + renewal-dismiss (screenshot confirms amber banner 'Term ends in 15 days'). No React Native red screens; only pre-existing 'shadow* deprecated' style warning (unrelated to this phase).",
+  "platforms_tested": ["web", "mobile"],
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "web": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+    "mobile": {"ui_bugs": [], "integration_issues": [], "design_issues": [], "react_native_issues": []}
+  },
+  "parity_issues": [],
+  "test_report_links": [
+    "/app/backend/tests/test_iter71_phase4.py",
+    "/app/test_reports/pytest/iter71_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "scheduler._nightly_job: win-back email loop (2b) and lapsed-downgrade update_many (2c) run in separate DB round-trips. Under a concurrent scheduler run the same user could get counted twice for the winback IF winback_sent_for is not yet set — mitigated in practice by winback_sent_for check, but the downgrade update_many is unconditional (matches on subscription_expires < now regardless of winback_sent_for). If a fast concurrent worker triggered downgrade first, the second worker's 2b loop would already see subscription_tier='free' and skip winback. Order is correct here (winback runs before downgrade), but a comment noting that invariant would help future refactors.",
+    "community_router.founding_partners: `.to_list(20)` caps to 20 but max cohort is 10 (5 global + 5 seattle). Fine, but the field-level projection here differs from list_partners (no user_id/bio) — intentional but inconsistent; consider a shared helper for the projection.",
+    "RenewalReminder.jsx: `daysLeft` uses `Math.ceil` — a 30-day expiry evaluated at 23:59 could evaluate to 31 days ceil'd. The check `left > 30` will hide the banner on the final second before rollover; acceptable but note the boundary.",
+    "mobile app/clubs.tsx: cards without a handle become no-op (`onPress={() => item.handle && router.push(...)}`) — safe, but there is no visual hint. Consider disabling pressable/opacity when handle is falsy.",
+    "GET /api/partners: no explicit rate limit or authentication. Directory is public which is fine, but a curl bomb could scrape the full org list. Consider a lightweight IP-based limit for parity with other public endpoints."
+  ],
+  "updated_files": ["/app/backend/tests/test_iter71_phase4.py"],
+  "success_rate": {"backend": "100% (6/6)", "frontend": "web 4/4 assertions live-verified; mobile 3/3 assertions live-verified"},
+  "test_credentials": "Admin: jenn@sailmorenow.com / [REDACTED]. Founding partner sample: partner.psss@sailmorenow.dev (handle pugetsoundsailingsoc). Ephemeral test users TEST_iter71_lapsed_* / TEST_iter71_renew_* auto-cleaned in test teardown.",
+  "seed_data_creation": "Bumped partner.psss@sailmorenow.dev subscription_expires to now+15d for renewal-reminder UI test, then reverted to now+365d and cleared renewal_notified_for/winback_sent_for. Minted a temporary session_token (test_session_iter71_*) for that user; deleted in cleanup. Founding cohort invariant re-verified after cleanup: GLOBAL=1, SEATTLE=0.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Phase 4 clean. Notes: (a) mobile home FoundingWall is on the marketing landing (app/index.tsx) and NOT shown once authenticated — authed users are redirected to /(tabs)/feed. Test it unauthenticated (clear window.localStorage.session_token). (b) The FoundingWall lazy-renders below the fold; scroll ~600px before asserting. (c) Web /clubs shows Iter69 test orgs (iter69org / iter69org2 / iter69org3) — they persist across runs and are harmless per main agent note. (d) POST /api/contact is rate-limited 3/10min/IP — the pytest suite makes only 1 call. (e) scheduler._nightly_job triggers the actual `send_email` for winback; with EMERGENT_EMAIL_KEY absent the mailer returns skipped status without raising, so tests do not need to mock it.",
+  "rca of the issue": "N/A — no bugs found."
+}

@@ -1,0 +1,54 @@
+{
+  "summary": "Iteration 34 (Phase N) full backend + frontend verification of 4 features: contact constants module, @-mention email fallback, inline digest preview modal on /admin/analytics, and Trending Topics client-side filter on /feed. Backend: new pytest suite /app/backend/tests/test_iter34_phase_n.py — 16/16 passed (in-process create_comment calls with mailer.send_email monkeypatched covering the full mention-email matrix, plus mailer template renders and HTTP regressions for /api/admin/analytics, /api/admin/digest/render, /api/webhooks/resend/digest, /api/searches/suggestions). Regression suite test_iter31_phase_m.py re-run: 14/14 passed. Frontend: Playwright verified footer constants on / and /feed, trending chips (render, filter, toggle-off, clear button, switch, empty state), and the digest preview modal (open, iframe src tracks selected market, iframe actually renders digest HTML via session cookie, close button, backdrop close, inner-click does not close, non-admin blocked). All feature assertions passed; only 3 minor/cosmetic gaps found.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {
+        "screen": "/admin/analytics digest preview modal",
+        "issues": [
+          "Escape key does not close the modal (only close button + backdrop). a11y/UX gap — add a keydown handler.",
+          "Background page still scrolls while the fixed-overlay modal is open (no body scroll lock); modal is also not focus-trapped and lacks role=dialog/aria-modal."
+        ]
+      },
+      {
+        "screen": "/feed trending chips",
+        "issues": [
+          "Chip count badge uses opacity-70 mono text at 10px on white — very low contrast/legibility for the '×3' counter."
+        ]
+      }
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter34_phase_n.py",
+    "/app/backend/tests/seed_iter34_ui.py",
+    "/app/test_reports/pytest/iter34.xml"
+  ],
+  "action_items": [
+    "(optional, minor) Close the digest-preview modal on Escape and lock body scroll while open; add role=\"dialog\" aria-modal=\"true\".",
+    "(optional, testability) Feed post cards have no data-testid — add data-testid=\"post-card\" (or post-card-<id>) so filter assertions can count cards instead of scraping page text.",
+    "(optional, cosmetic) Raise contrast of the trending chip count badge."
+  ],
+  "critical_code_review_comments": [
+    "community_router.create_comment mention block: db.push_subscriptions.count_documents() + db.users.find_one() are executed serially inside the per-mention loop on the request path. With 10 tokens x 5 hits = up to 50 mentioned users this is up to 100 sequential round trips plus N blocking send_email awaits before the HTTP response returns. Consider moving the whole mention fan-out (notify + email fallback) into _fire_and_forget, as is already done elsewhere in this router.",
+    "The mention email hardcodes app_url=\"https://app.sailmorenow.com\" instead of reading an env var (e.g. APP_PUBLIC_URL/FRONTEND_URL). Every other digest mailer path takes app_url from config; this one will link to the wrong host in preview/staging.",
+    "Mention resolution is prefix-match on name with a 3-char minimum, so '@TEST' matched a user named 'TEST Commenter' and any '@Alex...' token fans out to up to 5 users — a mention of one person can email 5 unrelated members. Consider matching on a unique handle, or requiring a full-name/word-boundary match.",
+    "mention_email_html escapes '<' but not '&' or quotes; the snippet is interpolated inside a double-quoted HTML attribute-free text node so it is safe today, but use a real escaper (html.escape) for consistency with report_digest_email_html.",
+    "AdminAnalytics DigestPreview: useState(markets[0]) is only evaluated on first render, so if analytics data loads after mount the select can stay empty and both preview buttons stay disabled. Prefer deriving/syncing market with a useEffect on markets."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter34_phase_n.py",
+    "/app/backend/tests/seed_iter34_ui.py"
+  ],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "seed_data_creation": "seed_iter34_ui.py created 4 users tagged TEST_iter34ui (1 admin w/ platform_role=admin, 3 members) with saved_searches pinning 'spinnaker' x3 and 'moorage' x2, plus 2 Greater Seattle posts ('TEST34 Spinnaker practice', 'TEST34 Dock party'). All seed users/sessions/posts were deleted after the UI run; pytest suite self-cleans via the TEST_iter34_* test_tag fixture.",
+  "should_call_test_agent_after_fix": false,
+  "should_main_agent_self_test": true,
+  "test_credentials": "No passwords — Emergent Google OAuth. Mint sessions per /app/auth_testing.md; re-run `python /app/backend/tests/seed_iter34_ui.py` to get fresh admin/plain session tokens (printed as JSON).",
+  "context_for_next_testing_agent": "All 4 iter-34 features verified green. Backend mention-email matrix is covered in-process in /app/backend/tests/test_iter34_phase_n.py::TestMentionEmailFallback — note the harness must create/set the asyncio loop BEFORE importing backend modules so deps.db's motor client binds to it, and monkeypatching mailer.send_email works because community_router does a local `from mailer import send_email` inside the mention block. When asserting on trending chips, use exact data-testid 'trending-0'/'trending-1' — a prefix selector like [data-testid^=\"trending-\"] also matches the 'trending-topics' container and silently clicks dead space (this cost one false-negative run). Feed post cards still have no data-testid, so filter assertions rely on inner_text of [data-testid=feed-page]. RESEND_WEBHOOK_SECRET is unset in backend/.env, so /api/webhooks/resend/digest accepts unsigned payloads (by design fallback) — signature-rejection paths cannot be exercised until the secret is set.",
+  "rca_of_the_issue": "No product defects found. The two initial failures in my own suite were test-side: (1) seeded emails are lowercased while user_ids contain 'TEST_', so uid substring matching against recipient_email needed .lower(); (2) report_digest_email_html escapes '<' to '&lt;' so the assertion had to look for '&lt;b>'. mailer.report_digest_email_html is confirmed intact — it renders 'Reports queue — weekly digest' with counts, oldest-open line and recent-open rows."
+}

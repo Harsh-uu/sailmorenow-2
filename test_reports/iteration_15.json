@@ -1,0 +1,68 @@
+{
+  "summary": "Phase G full-stack verification. Backend: new /app/backend/tests/test_phase_g.py (38 tests) covering date_utils.normalize_iso unit cases, POST /api/events canonicalization + GET /api/events past-filter, GET /api/digest/preview (auth/400/shape/market-override/empty-flag/parity with scheduler.compute_digest_payload), GET /api/admin/events (403 anon, 403 non-admin, 200 admin, past hidden, PATCH round-trip, sort order), and the startup normalization migration (verified with SMN_ALLOW_RESTART=1 -> legacy date-only starts_at/ends_at rewritten to canonical UTC + 'normalized ISO timestamps on N legacy events' log line present). Full regression across all phase suites: 248 passed / 1 failed / 10 skipped. Frontend: /digest (anon redirect, 400 no-market, crew+event+comment rendering, opt-in toggle + PATCH persistence across reload), /admin/events (non-admin gate, 30 event cards, invalid-email rejection, staging + unsaved pill, save, reload persistence, chip removal, Enter-to-add), and Feed Avatar (dead URL -> onError -> '\u26f5' fallback with 0 <img>, emoji avatar renders as emoji, outer circle stays 36x36 = h-9 w-9 and is fully contained inside the post card). Only 1 backend assertion failed and it is a spec-vs-implementation conflict (see below); all frontend assertions passed.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {
+        "endpoint": "GET /api/events",
+        "issue": "SPEC CONFLICT: the review request states 'create with ends_at=now-1h -> hidden', but list_events compares against today_iso (date-only, '2026-08-21'). An event with ends_at='2026-08-21T04:45:00+00:00' string-compares >= '2026-08-21' and therefore stays visible for the rest of the calendar day. Test tests/test_phase_g.py::TestCreateEventCanonical::test_ended_one_hour_ago_hidden fails. The code comment says this is deliberate (keep same-day events visible all final day). Decide which behaviour is intended: if intra-day precision is wanted, compare against datetime.now(timezone.utc).isoformat() (and use start-of-today only as a fallback for date-only rows); if the current behaviour is intended, update the spec and I will flip the assertion."
+      }
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {
+        "component": "Header.jsx (line 113)",
+        "issue": "Shared Avatar rollout is incomplete. Header still renders a raw <img src={user.picture}> with no onError fallback, so a dead avatar URL shows the browser broken-image glyph in the top-right nav (visible in both /digest and /feed screenshots for the seeded dead-URL user). Same raw-<img>-without-onError pattern remains in Profile.jsx:105, CrewBank.jsx:190, Reviews.jsx:65, CrewBankModal.jsx:108, OpenCrewSlots.jsx:30, PostComments.jsx:69.",
+        "selector": "header img[alt='']",
+        "priority": "MEDIUM"
+      }
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {
+        "screen": "/digest",
+        "issues": [
+          "The 'Delivery' opt-in card wraps below the headline block and sits left-aligned instead of top-right on a 1920px viewport (parent is flex justify-between flex-wrap but the left column has no width cap, so it always wraps). Consider max-w-2xl / basis on the left column or a two-column grid.",
+          "The opt-in control is an unstyled native checkbox while the rest of the app uses shadcn controls; a Switch would match the design language."
+        ]
+      },
+      {
+        "screen": "/admin/events",
+        "issues": [
+          "Disabled Save button uses white text on bg-[#F2A03B] with disabled:opacity-40 — the label is barely legible against the page background; darken the label or use a neutral disabled style.",
+          "30 event cards render with no search/filter or market grouping; scanning for a specific event is tedious."
+        ]
+      }
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_phase_g.py",
+    "/app/backend/tests/seed_phase_g_ui.py",
+    "/app/test_reports/pytest/phase_g_iter15.xml",
+    "/app/test_reports/pytest/phase_all_iter15.xml"
+  ],
+  "action_items": [
+    "Resolve the GET /api/events past-filter spec conflict: either switch the $expr comparison to full now-ISO precision (so an event that ended 1h ago is hidden) or confirm the 'visible until end of day' behaviour and I will update the assertion.",
+    "Adopt the shared <Avatar> component in Header.jsx, Profile.jsx, CrewBank.jsx, Reviews.jsx, CrewBankModal.jsx, OpenCrewSlots.jsx and PostComments.jsx so dead picture URLs never render a broken-image glyph.",
+    "Design polish on /digest (Delivery card placement + use a Switch) and /admin/events (disabled Save contrast, add a filter)."
+  ],
+  "critical_code_review_comments": [
+    "server.py startup migration scans the ENTIRE events collection on every boot (db.events.find({}) with no filter/projection guard on already-canonical rows). It is idempotent but O(N) per restart; add a filter such as {'$or': [{'starts_at': {'$regex': '^\\\\d{4}-\\\\d{2}-\\\\d{2}$'}}, {'starts_at': {'$regex': 'Z$'}}, ...]} or a one-shot migration marker doc.",
+    "admin_router.admin_list_events duplicates the past-event $expr predicate from community_router.list_events. Extract it into a shared helper (e.g. aggregator.upcoming_event_predicate) so the two endpoints can never drift.",
+    "normalize_iso silently returns unparseable input unchanged (fail-open). POST /api/events therefore accepts starts_at='not-a-date' and stores it verbatim, which then sorts/filters unpredictably. Consider rejecting with 400 when normalize_iso returns a value that does not parse as a datetime.",
+    "date_utils.normalize_iso uses `if value in (None, '')` — for a datetime/date argument this invokes __eq__ against '' which is fine today, but an explicit `if value is None or (isinstance(value, str) and not value.strip())` is safer.",
+    "DigestPreview.jsx has no loading state on the toggle beyond `disabled={busy}`; a failed PATCH shows a toast but the checkbox already reflects the old value correctly — OK, but the optimistic setData happens after await so no rollback needed. No action required, noted for completeness."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_phase_g.py (new)",
+    "/app/backend/tests/seed_phase_g_ui.py (new)"
+  ],
+  "success_rate": {"backend": "97% (37/38 phase G; 248/249 across all suites)", "frontend": "100% of executed assertions (17/17)"},
+  "seed_data_creation": "TEST_userGUI_* users (admin, digest user w/ primary_market, no-market user, dead-avatar user + post, emoji-avatar user + post), 2 crew_bank_standalone rows and 1 upcoming event in Greater Seattle. ALL seed + test artifacts were deleted after the run (verified 0 TEST_user* users, 0 TEST_* events, 0 TEST_* crew rows remaining). Re-seed with `python /app/backend/tests/seed_phase_g_ui.py` which prints fresh session tokens.",
+  "should_call_test_agent_after_fix": false,
+  "should_main_agent_self_test": true,
+  "test_credentials": "Emergent Google OAuth; sessions minted directly in mongo per /app/auth_testing.md. /app/memory/test_credentials.md exists and is accurate.",
+  "context_for_next_testing_agent": "test_phase_g.py is xdist-safe (RUN_PREFIX TEST_userG_<worker>_) with module-scoped teardown that now also purges events by title regex ^TEST_userG (earlier run left 4 orphan events, manually cleaned). The startup-migration test is gated behind SMN_ALLOW_RESTART=1 and was verified PASS in this iteration. The single failing test (test_ended_one_hour_ago_hidden) is intentional and encodes the review-request spec, not a flake — flip or keep depending on the developer's decision. For UI runs use /app/backend/tests/seed_phase_g_ui.py to mint tokens; it wipes and re-seeds TEST_userGUI_* on every run. Backend restart during a run is safe (hot reload) but transient net::ERR_CONNECTION_CLOSED appears in browser console right after a restart.",
+  "rca_of_the_issue": "GET /api/events (community_router.list_events:141-153) builds today_iso = datetime.now(timezone.utc).date().isoformat() -> '2026-08-21' and filters with $expr {$gte: [{$ifNull: ['$ends_at','$starts_at']}, today_iso]}. Because mongo compares these as strings, any full ISO timestamp on the current calendar day ('2026-08-21T04:45:00+00:00') is lexicographically greater than '2026-08-21', so events that already ended earlier today remain listed. This is a deliberate trade-off to keep date-only same-day events visible, and Phase G's normalize_iso migration removed the date-only rows that made it necessary — so the filter can now safely be tightened to full now-ISO precision if intra-day hiding is desired."
+}

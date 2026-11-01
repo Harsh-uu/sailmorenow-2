@@ -1,0 +1,47 @@
+{
+  "summary": "Iteration 21 polish batch tested end-to-end. Backend: 16/16 pytest cases pass serially in /app/backend/tests/test_iter21.py (auth/ws-token 401+authed via Bearer & cookie, WS accept/reject, comment.count broadcast on create AND delete, push preferences GET/PATCH persistence, admin recipients-bulk dedupe/lowercase/merge/403/404, Resend Svix webhook dev-bypass + 401 missing sig + 401 bad sig + 200 valid HMAC with RESEND_WEBHOOK_SECRET temporarily set then removed). Frontend: /profile Push Preferences panel renders, pref-dm toggle PATCHes and persists across reload; Feed live comment count updates without refresh (create -> (1), delete -> cleared) when the card's comments panel is open; Admin Events shows 'Import CSV' and Template button which downloads recipients-template.csv. One real defect found: WSManager keeps a single socket per user_id while PostComments opens one WebSocket per post card (7 sockets on a 7-post feed), so only the last-registered socket receives broadcasts — cards whose comment panel is not open never get the live count, and the Messages page DM socket is clobbered by the Feed.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "WS /api/ws/{user_id} (deps.WSManager)", "issue": "self.active is Dict[user_id -> single WebSocket]; a second connection for the same user silently replaces the first, and disconnect(user_id) pops whichever socket is currently registered (even if it belongs to a different, still-open connection). Should hold a set/list of sockets per user and remove only the closing socket."},
+      {"endpoint": "WS /api/ws/{user_id}", "issue": "Pre-accept close(4401) is surfaced by the ingress as an HTTP 403 handshake failure, so browsers never see code 4401. Verified rejection works, but any client logic keyed on 4401 will not fire (tests assert 4401 OR 403)."},
+      {"endpoint": "POST /api/webhooks/resend/digest", "issue": "No svix-timestamp freshness/tolerance check — an intercepted valid signature can be replayed indefinitely (Svix recommends a 5-minute window)."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [
+      {"flow": "Feed live comment count (WS)", "issue": "PostComments.jsx opens a WebSocket per post card (7 sockets on a 7-post feed, plus a reconnect on every open/close toggle). Combined with the server's one-socket-per-user map, only the most recently connected card actually receives comment.count frames. Verified: with the panel closed, a comment created by another user did NOT update the card badge ('Show comments' stayed unchanged), while the same test passed when the panel was toggled open (that reconnect made it the last-registered socket). Fix: hoist a single shared WS (context/hook) for the page and fan out to subscribers, and/or make WSManager multi-socket per user.", "affected_selectors": ["[data-testid=\"toggle-comments-<post_id>\"]"]},
+      {"flow": "Messages DM live updates", "issue": "Consequence of the same single-socket map: navigating with Feed mounted (or a second tab) replaces the Messages page socket, so DM live delivery can silently stop. Not separately reproduced, inferred from WSManager code + observed socket churn.", "affected_selectors": []}
+    ],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter21.py",
+    "/app/backend/tests/seed_iter21_ui.py",
+    "/app/test_reports/pytest/iter21_all.xml",
+    "/app/test_reports/pytest/iter21_webhook.xml"
+  ],
+  "action_items": [
+    "Share ONE WebSocket per page (context/hook) in PostComments.jsx instead of one per post card, and/or change deps.WSManager.active to user_id -> set(WebSocket) with per-socket disconnect, so closed-panel cards and the Messages page both receive broadcasts.",
+    "Add svix-timestamp tolerance (e.g. reject > 5 min skew) to _verify_svix_signature.",
+    "Optional: comment.count broadcast is global (every connected user) — consider scoping to viewers/subscribers of the post to avoid fan-out cost."
+  ],
+  "critical_code_review_comments": [
+    "deps.py WSManager: single-socket-per-user map is the root cause of the missed live updates; also disconnect() can evict a live socket belonging to another tab.",
+    "PostComments.jsx: WS effect depends on [post.id, open, user?.user_id] so every toggle tears down and re-opens a socket and re-requests /auth/ws-token — noisy and racy.",
+    "/auth/ws-token returns the raw long-lived session token in a JS-readable response, defeating the HTTP-only cookie for XSS purposes; a short-lived single-use WS ticket would be safer."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter21.py",
+    "/app/backend/tests/seed_iter21_ui.py",
+    "/app/test_reports/iteration_21.json"
+  ],
+  "success_rate": {"backend": "100% (16/16)", "frontend": "90% (9/10 checks; live count fails for non-open cards)"},
+  "seed_data_creation": "Ephemeral TEST_user21_* / TEST_ui21_* users+sessions, one post, one event, comments — all deleted after the run. RESEND_WEBHOOK_SECRET was added to /app/backend/.env for the signed-webhook test and removed afterwards (verified absent; backend restarted and healthy).",
+  "should_call_test_agent_after_fix": true,
+  "should_main_agent_self_test": false,
+  "test_credentials": "No passwords; sessions minted in Mongo per /app/auth_testing.md",
+  "context_for_next_testing_agent": "Run test_iter21.py SERIALLY (`pytest tests/test_iter21.py -n 0`) — TestResendWebhook restarts the backend, which 502s other xdist workers (that was the only cause of the 2 failures in the parallel run). WS reject shows up as HTTP 403 through the ingress, not close code 4401. To retest the live-count fix: open /feed with a session cookie, do NOT open the comments panel, create a comment as another user via API, and assert the toggle badge updates; also verify with >1 post card and with /messages open in a second tab.",
+  "rca_of_the_issue": "PostComments.jsx mounts one WebSocket per rendered post card, but deps.WSManager stores exactly one WebSocket per user_id (self.active[user_id] = ws). Each new connection overwrites the previous entry, so broadcast() only reaches the last card that connected; the earlier cards' sockets stay open client-side but are never written to. Additionally disconnect(user_id) removes whatever socket is registered, so a closing tab/card can unregister another live connection."
+}

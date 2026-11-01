@@ -1,0 +1,44 @@
+{
+  "summary": "Iter50 theme-overhaul regression. (1) Backend: tests/test_iter48_retest.py = 6/6 PASS (no regression). (2) Test-id preservation: ALL 40+ requested data-testids render exactly once on their pages (landing, pricing incl. sailor-months-1 + stripe-test-hint after audience switch, contact, community-hub, /@captainjane incl. handle-dm when signed in as seed_marina, handle-notfound for /@zzz_no_such, directory with 4 pro-card-<id>). Zero missing, zero duplicates. (3) Header: /(landing) opens data-transparent=true, flips to false after 200px scroll (backdrop-blur-xl solid surface) and back to true at top; /pricing, /contact, /directory, /community-hub, /@captainjane, /dashboard all data-transparent=false on load. theme-toggle present on every page; click toggles html.dark and persists localStorage['smn-theme'] across reload; aria-label/icon flip correctly (Moon in light, Sun in dark). (4) Wave dividers: 3 on landing, 1 each on the other 5 public routes; inline SVG viewBox 0 0 1440 120 + preserveAspectRatio=none, no baseline gap. (5) Dark/light x laptop(1440)/tablet(900)/mobile(420) across all 6 public routes: zero console pageerrors, theme class applied correctly in all 36 combos, hero band stays dark, amber CTAs visible. Found 3 real defects: an invisible dark-mode heading on landing, a header layout overflow at 768-1000px, and directory pro-card overflow on mobile, plus low-contrast micro-labels.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "OpenCrewSlots.jsx (landing 'Open crew slots' section)", "issue": "DARK MODE: H2 'Sailors ready to hop on a boat.' and the 'See all races' link are hardcoded text-[#1F3F5B] with no dark: variant -> rendered navy on slate-800 band (contrast 1.34:1, effectively invisible). Reproduced at all 3 viewports in dark theme. Also the crew-slot card inside this section stays pure white in dark mode, unlike the dark:bg-slate-800 cards elsewhere.", "selector": "landing-page section containing 'See all races'", "priority": "HIGH"},
+      {"component": "Header.jsx", "issue": "TABLET LAYOUT OVERFLOW: at 768-1000px the md: desktop nav + market selector + theme toggle + Sign in add up to ~978px, so document.scrollWidth > viewport on every route and [data-testid=login-btn] renders at x=904 (off-screen at vw=768/900). User must horizontally scroll to reach Sign in / theme toggle. Suggest raising the desktop-nav breakpoint to lg: or hiding the market selector below lg.", "selector": "[data-testid=app-header] [data-testid=login-btn]", "priority": "HIGH"},
+      {"component": "Directory.jsx ProCard", "issue": "MOBILE OVERFLOW: pro-card measures 480px inside a 388px single-column grid at vw=420 (both themes) -> page scrolls horizontally, the PREMIUM/FEATURED badge (absolute top-4 right-4) and the markets text are clipped outside the screen. Grid child needs min-w-0 (and the avatar/title flex row + rating row need min-w-0/flex-wrap) so min-content doesn't blow out the column.", "selector": "[data-testid=pro-grid] [data-testid^=pro-card-]", "priority": "HIGH"},
+      {"component": "Landing hero", "issue": "Decorative watermark img (hidden lg:block absolute -right-24 -top-8 w-[520px] opacity-10) extends to x=1536 at vw=1440 causing a horizontal scrollbar on /. Add overflow-hidden to the hero band.", "selector": "landing hero watermark img", "priority": "MEDIUM"},
+      {"component": "Header.jsx (signed-in, 1440px)", "issue": "With auth links (Reviews/Digest) + admin/market/search/bell/messages/profile the nav wraps to two lines ('Boat Pros', 'Crew Bank' break) at 1440px. Cosmetic crowding.", "selector": "[data-testid=app-header] nav", "priority": "LOW"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "All public pages - SectionEyebrow / tier labels (light theme)", "issues": ["Teal #55B3AD 11-12px uppercase eyebrows on white/off-white surfaces measure 2.37-2.49:1 (need 4.5:1): 'Marine service directory', 'Pricing', 'Say hello', 'Sailor profile', 'About', 'Recent posts', tier labels 'Basic'/'Featured'. Darken the eyebrow token (e.g. #2F7D78) or bump weight/size.", "Amber #F2A03B eyebrow on off-white (community-hub) = 2.03:1; amber 'Open ->' link on white card = 2.13:1."]},
+      {"screen": "Directory / Contact - badges & amber pills", "issues": ["White text on #F2A03B (PREMIUM badge, info@sailmorenow.com pill, 'Browse the directory' CTA) = 2.13:1; white on #55B3AD (FEATURED badge) = 2.49:1. Use navy text on amber/teal fills instead of white."]},
+      {"screen": "Footer (all pages, both themes)", "issues": ["Teal column headings on navy = 4.39:1 and slate-400 body/copyright on navy = 4.26:1 - just under 4.5:1."]},
+      {"screen": "Directory / public pages hero-to-body rhythm", "issues": ["~130px of empty space between the wave divider and the first content row (search bar) on /directory at laptop and mobile - band padding looks unintentional/oversized."]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_iter48_retest.py", "/app/test_reports/pytest/pytest_results.xml"],
+  "action_items": [
+    "OpenCrewSlots.jsx: add dark: variants to the H2 and 'See all races' link (dark:text-white / dark:text-slate-200) and give the crew-slot card dark:bg-slate-800 + dark border.",
+    "Header.jsx: fix 768-1000px overflow - move desktop nav to lg:flex or hide market selector below lg so Sign in + theme toggle stay on screen.",
+    "Directory ProCard: add min-w-0 (grid child + inner flex rows) to stop 480px min-content overflow at 420px.",
+    "Add overflow-hidden to the landing hero band so the decorative watermark doesn't create horizontal scroll.",
+    "Contrast pass on teal/amber micro-labels and badges (2.0-2.5:1) and footer link/copy colours (4.26-4.39:1)."
+  ],
+  "critical_code_review_comments": [
+    "Hardcoded brand hexes (text-[#1F3F5B]) without paired dark: variants are the systemic risk of this theme pass - OpenCrewSlots.jsx and CommunityHub.jsx:110 both do it. Consider a semantic token (e.g. text-ink / .smn-heading) applied once in index.css instead of per-element hex.",
+    "Header renders a second <ThemeToggle> inside the mobile drawer, so [data-testid=theme-toggle] resolves to 2 nodes whenever the drawer is open - give the drawer instance a distinct testid (theme-toggle-mobile) to keep future strict-mode selectors safe.",
+    "ThemeContext writes localStorage only via setTheme/toggle (correct), but initialTheme runs before paint in React state - a small inline script in index.html would remove the light-flash on first dark-mode load."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "100% (6/6)", "frontend": "85% - all testids/header/theme/wave requirements pass; 3 layout/visibility defects + contrast issues"},
+  "seed_data_creation": "Ran /app/backend/tests/seed_iter48_ui.py to mint session_token=test_iter48_ui_token for user seed_marina (used only to verify handle-dm on /@captainjane).",
+  "should_call_test_agent_after_fix": true,
+  "should_main_agent_self_test": false,
+  "test_credentials": "Cookie session_token=test_iter48_ui_token (seed_marina) via /app/backend/tests/seed_iter48_ui.py; withCredentials cookie auth, domain nw-sailing-community.preview.emergentagent.com, sameSite=None, secure.",
+  "context_for_next_testing_agent": "Testid inventory for the 6 public pages is verified complete as of iter50 - no need to re-enumerate unless pages are rewritten. Contrast harness used: walk up ancestors for first opaque backgroundColor, compute WCAG ratio; NOTE hero bands use gradients/images with transparent background-color, so hero white text is a FALSE POSITIVE in that harness - verify hero legibility by screenshot instead. Real dark-mode failure to re-check: landing 'Open crew slots' heading + 'See all races'. Re-check header overflow at exactly 768/900px and directory pro-card width at 420px after fixes.",
+  "rca_of_the_issue": "1) OpenCrewSlots.jsx keeps light-only brand hex classes (text-[#1F3F5B]) while its parent band picked up dark:bg-slate-800 in the theme pass -> navy-on-navy. 2) Header keeps the md: breakpoint for the full 8-item desktop nav plus market selector; the combined intrinsic width (~978px) exceeds 768-960px viewports, pushing the auth cluster past the right edge. 3) Directory grid items lack min-w-0, so the card's min-content width (avatar + non-shrinking title/rating rows) forces 480px inside a 388px column."
+}

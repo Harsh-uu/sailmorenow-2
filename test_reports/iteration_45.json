@@ -1,0 +1,47 @@
+{
+  "summary": "Iter45 verification of the 4 polish items. Backend: 8/9 pytest cases pass (/api/admin/contact/{id}/reply contract {ok,persisted,delivered,reply} + persistence + 401/403/404/400 guards; /api/handle/available 429 detail + per-IP isolation). One FAIL is a real defect: delivered is only set False when mailer.send_email RAISES, but mailer.send_email never raises (it returns {'status':'error'|'skipped'}), so a real Resend outage still reports delivered=true. Frontend: (1) Onboarding 429 hint PASS — burning the throttle from the page then re-checking shows data-testid='handle-availability-throttled' 'Too many checks — try again in a moment.' in text-amber-600; taken state still works. (2) AdminContact PASS — shadcn Select trigger opens 3 items (thanks/feature/partner), picking 'Feature request logged' populates reply-body-<id> and the trigger shows the label, typing resets it to the placeholder, send → toast 'Reply sent & delivered.'; amber data-testid='reply-retry-badge-<replyId>' 'Saved · email retry pending' renders only on the delivered:false reply. (3) Photo auto-compress PARTIAL — a 2.6MB 2000x1500 PNG auto-compressed to a 256,895-char data URL, PATCH 200, thumbnail in pro-photo-slot-0; non-image file skipped with toast and no PATCH; BUT a big noisy 4000x3000 image compressed to a 429,302-char data URL, was sent, and the server rejected it 400 'Each photo must be ≤400KB' — the user still sees the hard reject. (4) Regression PASS — /@captainjane renders HandleProfile, /notarealroute redirects to /.",
+  "backend_issues": {
+    "critical": [
+      {"endpoint": "POST /api/admin/contact/{msg_id}/reply", "issue": "delivered/ok do NOT mirror Resend success. mailer.send_email is documented as 'Never raises — always returns a dict' and returns {'status':'error', ...} on HTTP>=400/exception and {'status':'skipped'} when EMERGENT_EMAIL_KEY is missing. The router only flips ok=False inside `except Exception`, so every real mailer failure is recorded as delivered=true. Consequence: the new amber 'Saved · email retry pending' badge and the 'Saved — email delivery failed' toast are effectively unreachable in production. Fix: `res = await send_email(...); ok = isinstance(res, dict) and res.get('status') == 'ok'` (plus keep the except branch).", "priority": "HIGH"}
+    ],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "ProPhotosUploader / lib/imageCompress.js", "issue": "Client-side size gate is measured in JPEG BLOB BYTES (maxBytes=380_000, then `r.bytes > 400_000`) while the backend validates the BASE64 DATA-URL LENGTH (len(photo) <= 400_000). Base64 inflates by ~4/3, so any photo whose compressed blob lands between ~300KB and 400KB passes the client gate and is rejected server-side with 400 'Each photo must be ≤400KB' (reproduced: request payload 429,302 chars, PATCH 400, red toast, no thumbnail). Fix: compress/compare against the data-URL length (e.g. maxBytes ≈ 285_000 bytes, and check r.dataUrl.length <= 400_000 before PATCH).", "selector": "[data-testid=\"pro-photos-file\"]", "priority": "HIGH"},
+      {"component": "ProPhotosUploader", "issue": "When compressImageToDataURL returns null (cannot get under maxBytes even at the lowest quality) the file is dropped with NO toast at all — `if (!r) return null;` — so the requested 'skips gracefully with a toast' behaviour is missing for that branch.", "selector": "[data-testid=\"pro-photos-file\"]", "priority": "MEDIUM"},
+      {"component": "lib/imageCompress.js", "issue": "The quality ladder never actually reaches 0.4: q goes 0.85, 0.75 … 0.45 and then the `q >= 0.4` loop condition ends (float drift also makes the `q <= 0.4` escape hatch dead code), so the documented 0.85→0.4 range stops at ~0.45 and the function returns null instead of a best-effort blob.", "selector": "n/a", "priority": "MEDIUM"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "AdminContact", "issues": ["Sonner toast renders top-center and overlaps the 'Contact queue' page heading — cosmetic only"]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter45_polish.py",
+    "/app/backend/tests/seed_iter45_ui.py",
+    "/app/test_reports/pytest/iter45_polish.xml"
+  ],
+  "action_items": [
+    "admin_router.admin_contact_reply: derive ok/delivered from the send_email RETURN value (status == 'ok'), not just from an exception — otherwise delivered is always true and the new retry badge/toast never fire.",
+    "imageCompress.js / ProPhotosUploader: gate on the base64 data-URL length (server limit is 400,000 chars), not blob bytes — a compressed 429KB data URL is still hard-rejected with 400 today.",
+    "ProPhotosUploader: show a toast when compressImageToDataURL returns null (currently a silent drop).",
+    "imageCompress.js: fix the quality ladder so it truly reaches q=0.4 (use integer steps or `q > 0.35`) and return the best-effort blob instead of null."
+  ],
+  "critical_code_review_comments": [
+    "mailer.send_email swallows all failures and returns a status dict; any caller that keys success off try/except (admin reply, and likely other senders) will always believe delivery succeeded. Consider a shared helper `did_send(res)`.",
+    "The 400KB photo limit is expressed twice in two different units (client bytes vs server data-URL chars). Put the limit in one place (e.g. export MAX_PHOTO_CHARS = 400_000) and have the client measure dataUrl.length.",
+    "Onboarding HandleAvailability 429 handling is correct and the autofill probe loop breaks on 429 — good; the amber hint is a plain text node (no aria-live), so screen readers won't announce the throttle."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter45_polish.py",
+    "/app/backend/tests/seed_iter45_ui.py"
+  ],
+  "success_rate": {"backend": "89% (8/9)", "frontend": "75% (3 of 4 polish items fully pass; photo auto-compress partially fails)"},
+  "seed_data_creation": "Temporary mongo sessions/users TEST_iter45_admin, TEST_iter45_admin_ip, TEST_iter45_onboard plus a TEST_Iter45 contact message carrying one delivered:true and one delivered:false reply, and a session for pro.marina. All deleted afterwards (seed_iter45_ui.py clean); db.boat_pros.seed_marina.photos restored to the original 2 Unsplash URLs.",
+  "should_call_test_agent_after_fix": true,
+  "should_main_agent_self_test": false,
+  "test_credentials": "Emergent Google OAuth only — sessions minted in mongo per /app/auth_testing.md; seeded users in /app/memory/test_credentials.md (both present and accurate).",
+  "context_for_next_testing_agent": "Run `pytest tests/test_iter45_polish.py -n 0` from /app/backend (runtime ~10s; the throttle tests use spoofed X-Forwarded-For buckets so no 61s sleep is needed). The delivery-failure test calls admin_router.admin_contact_reply IN-PROCESS with mailer.send_email patched, and both scenarios must share ONE asyncio.run because motor binds to the first loop. UI fixtures: `python /app/backend/tests/seed_iter45_ui.py` prints admin/onboard/pro tokens + msg_id + undelivered_reply_id; `... clean` removes them. Photo repro: a 4000x3000 noisy PNG (PIL random noise + GaussianBlur) compresses to a ~429k-char data URL which the server 400s; a 2000x1500 blurred-noise PNG compresses to ~257k chars and succeeds.",
+  "rca_of_the_issue": "Two unit mismatches. (1) Reply delivery: mailer.send_email never raises, so `try/except` around it cannot detect failure; ok/delivered are therefore hard-wired to true unless the mock raises. (2) Photo compression: the client measures the JPEG Blob size in bytes (limit 400,000) while the API validates the base64 data-URL character count (limit 400,000). Base64 adds ~33%, so blobs of ~300–400KB produce 400–535k-char payloads that the server rejects with HTTP 400, leaving the original 'over 400 KB' hard-reject experience in place for genuinely large camera photos."
+}

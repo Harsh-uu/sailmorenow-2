@@ -1,0 +1,37 @@
+{
+  "summary": "Focused backend retest of the four iteration_13 follow-up fixes. Added /app/backend/tests/test_iter14_events.py (20 tests) covering: (1) GET /api/events read-time past filter — live response has 0 past events (29 served, mongo cross-check countDocuments($expr ends_at||starts_at < now) over the returned ids == 0), seeded fully-past + past-start-only events are hidden while an in-progress multi-day (starts -2d, ends +3d) and a future event are served; market/from-to filters, starts_at sort order and no _id leak all still hold. (2) Response shape unchanged after the 2-aggregation refactor: event with 2 attendee + 1 volunteer registrations and 4 crew_bank rows (3 non-'found' + 1 'found') returns registrations={attendee:2,volunteer:1}, crew_count=3; empty event returns {attendee:0,volunteer:0}/0. (3) Startup purge verified with a real `supervisorctl restart backend` (SMN_ALLOW_RESTART=1): 3 seeded past source='aggregator' docs deleted, a past source='community' doc preserved, log line 'purged 5 stale past aggregator events on startup' present; steady-state db has 0 past aggregator docs. (4) PATCH /api/admin/events/{id}/email-recipients: ['Ops@Partner.org','ops@partner.org','Captain@yc.com'] -> stored exactly ['ops@partner.org','captain@yc.com'] (lowercased, deduped, order preserved, verified in mongo); trim+case dupes collapse; 'no-at', ' ' and a >254-char address each 400 with the doc left unmutated; non-admin 403; unknown event 404. (5) Per-recipient try/except: _maybe_email_organizer invoked in-process with send_email raising on call #1 — all 3 recipients (organizer + 2) still get a send attempt, in order. Full regression: 212 passed, 9 skipped, 1 xfailed, 0 failed. test_events_aggregator_bugfix.py::TestPastEventsStillFiltered now PASSES. seed_alex.identity_verified=true preserved (asserted in mongo). No frontend testing per request.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "GET /api/events", "issue": "Date-only ISO values break the new string comparison for SAME-DAY events. 9 events store starts_at/ends_at as 'YYYY-MM-DD'; '2026-08-21' < '2026-08-21T05:26:30+00:00' lexicographically, so an event happening TODAY is hidden from 00:00Z onwards instead of at end of day. Reproduced live (probe event with starts_at=ends_at=today was NOT served) and documented by test_iter14_events.py::TestPastFilter::test_date_only_event_today_is_still_visible (xfail). Fix: compare against start-of-day UTC (now.date().isoformat()) or normalize/pad the stored dates on write."},
+      {"endpoint": "GET /api/events", "issue": "Mixed ISO suffixes in the same collection (1 doc ends with 'Z', 10 docs are tz-naive, rest '+00:00') make the $expr string comparison format-dependent ('Z' > '+' at equal instants; naive local-time values are treated as UTC). Only sub-day/timezone-edge inaccuracy today, but worth normalizing at ingest."},
+      {"endpoint": "startup purge", "issue": "past_event_predicate() is scoped to source='aggregator', so past community/seed events (10 docs have source=null) are never deleted — they are correctly hidden by the read-time filter but the collection keeps growing. Intentional? If so ignore; otherwise purge or archive non-aggregator past events too."}
+    ]
+  },
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_iter14_events.py",
+    "/app/test_reports/pytest/pytest_results_iter14.xml"
+  ],
+  "action_items": [
+    "Handle date-only starts_at/ends_at in the GET /api/events past filter so same-day events are not hidden (compare against start-of-day UTC, or normalize dates at ingest)."
+  ],
+  "critical_code_review_comments": [
+    "list_events past filter and startup purge both delegate to the shared shape ($ifNull ends_at/starts_at) — good, no drift; but both rely on lexicographic string comparison of ISO values, so ingest-time normalization of starts_at/ends_at to a single canonical UTC format would make the predicate correct by construction.",
+    "The N+1 fold is correct: one $group over event_registrations keyed by {event_id,kind} and one over crew_bank with status!='found'; ev_ids is bounded by to_list(500). Consider indexes on event_registrations.event_id and crew_bank.event_id (not currently created in _startup) — the aggregations are now COLLSCAN+$match on $in.",
+    "admin_set_event_recipients validates/lowercases/dedupes before the single update_one and raises 400 before any write, so partial saves are impossible — verified the doc is untouched on invalid input.",
+    "_maybe_email_organizer's inner per-recipient try/except logs with logger.exception and continues; the outer try/except still guards html rendering only — correct shape. Note failures are only logged, never surfaced/retried; consider a dead-letter record if organizer notification matters.",
+    "GET /api/events still has no pagination (hard to_list(500)) — with the past filter in place the working set is much smaller, but add limit/offset before the aggregator grows."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter14_events.py (new, 20 tests)",
+    "/app/backend/tests/test_events_aggregator_bugfix.py (test-only: the 3 Race Week Bellingham assertions are date-bound — that fixture ended 2026-07-25 and is now correctly purged/filtered, so they are skipif'd via race_week_obsolete instead of failing on 'expected >=66 events, got 29')"
+  ],
+  "success_rate": {"backend": "100% (212 passed / 9 skipped / 1 xfailed / 0 failed; all 20 iteration-14 tests pass)", "frontend": "not tested (not requested)"},
+  "seed_data_creation": "Ephemeral TEST_user14_* users/sessions/events/registrations/crew_bank rows, removed by the module teardown (verified 0 leftovers). A transient TEST_probe14_dateonly event was created and deleted while reproducing the date-only bug. seed_alex.identity_verified=true untouched.",
+  "should_call_test_agent_after_fix": false,
+  "should_main_agent_self_test": true,
+  "test_credentials": "No passwords — mongo-minted session_tokens per /app/auth_testing.md; admin via platform_role='admin'.",
+  "context_for_next_testing_agent": "Run as configured: `cd /app/backend && python -m pytest tests/ -q` (pytest.ini forces -n 2 --dist loadscope). Two restart-gated tests are behind SMN_ALLOW_RESTART=1 (test_iter14_events.py::TestStartupPurge::test_restart_purges_seeded_past_aggregator_events and test_phase_f.py::TestStartupMigration) — run them serially with -n 0; both PASS. TestStartupPurge::test_no_past_aggregator_docs_in_db excludes id:/^TEST_user14_/ because the suite itself seeds past aggregator fixtures after startup. The single xfail (date-only same-day event hidden) is the only open backend defect; it flips to XPASS once the filter handles date-only values. test_events_aggregator_bugfix.py's Race Week assertions are now skipped as date-obsolete — delete or re-anchor that fixture rather than un-skipping.",
+  "rca_of_the_issue": "Date-only bug: list_events builds now_iso = datetime.now(timezone.utc).isoformat() -> '2026-08-21T05:26:30.123+00:00' and compares it to the raw stored string. For a doc with ends_at='2026-08-21' the comparison stops at the 11th char ('' vs 'T'), so the shorter date-only string sorts BEFORE any timestamp on the same day and the event is classified as past for its entire final day. Affects the 9 date-only docs currently in db.events."
+}

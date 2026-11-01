@@ -1,0 +1,32 @@
+{
+  "summary": "Iteration 28 retest of the 3 iteration_27 findings. (1) FIXED — PostComments composer width: MentionTextarea now takes wrapperClassName (default 'flex-1 relative'); measured on the live feed the comment textarea is 710px inside a 782px row with a 64px Post button (i.e. it fills the row), and the mention popover still opens/renders correctly inside the new wrapper. (2) FIXED — POST /api/searches duplicate check now uses re.escape: q='sail.*' saves once, an identical second POST returns duplicate=true, a later 'sailing' POST is correctly NOT flagged duplicate (proving the metachars are literal), and 'J/105 (racing)' vs 'j/105 (RACING)' is still detected case-insensitively. (3) STILL BROKEN — scheduler ADMIN_EMAILS dedupe: the new admin_email_digests claim does NOT prevent a re-send. Two back-to-back _monday_admin_report_digest_job runs both emailed jenn@sailmorenow.com and left 2 duplicate claim docs for key 'admin_email::jenn@sailmorenow.com'. Backend pytest: 3/4 passed (the 1 failure is the real product bug). All test data (users, sessions, admin_email_digests docs, admin_report_digest_sent_at stamps) restored/cleaned.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "scheduler._monday_admin_report_digest_job", "issue": "ADMIN_EMAILS dedupe fix does not work. db.admin_email_digests.update_one({'key': k, '$or': [{'sent_at': None}, {'sent_at': {'$lt': cutoff}}]}, {'$set': {...}}, upsert=True) — on a re-run the filter no longer matches (sent_at is fresh), so with upsert=True Mongo INSERTS a brand new document (upserted_id is not None) and the code then re-sends the digest. Reproduced: second immediate run emailed jenn@sailmorenow.com again and left 2 docs with the same 'key'. Also no unique index on 'key', so the collection grows one doc per run.", "priority": "HIGH"}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": ["/app/backend/tests/test_iter28.py", "/app/test_reports/pytest/iter28.xml"],
+  "action_items": [
+    "Fix the ADMIN_EMAILS claim in scheduler._monday_admin_report_digest_job: (a) create a unique index on admin_email_digests.key, (b) replace the $or+upsert with an atomic two-step — first try update_one({'key': k, 'sent_at': {'$lt': cutoff}}, {'$set': {'sent_at': now}}) with upsert=False and send when modified_count==1; if matched_count==0, attempt insert_one({'key': k, 'sent_at': now}) inside try/except DuplicateKeyError and send only when the insert succeeds. Without the unique index any upsert-based approach will keep inserting duplicates.",
+    "Add a regression assertion that admin_email_digests holds exactly one doc per key after N runs."
+  ],
+  "critical_code_review_comments": [
+    "scheduler.py: the inline comment 'update_one with upsert returns modified_count=0 on first insert... Only send when either upserted OR we successfully modified an existing stale doc' is based on a wrong assumption — an upsert whose filter does not match always inserts, so upserted_id is not None on EVERY re-run. This makes the guard a no-op.",
+    "admin_email_digests has no unique index and no TTL/cleanup; each misfire/manual run leaves an extra doc.",
+    "MentionTextarea's wrapperClassName default 'flex-1 relative' silently assumes every consumer sits in a flex row; other call sites should pass an explicit wrapperClassName (currently PostComments is the only consumer, so no regression)."
+  ],
+  "updated_files": ["/app/backend/tests/test_iter28.py"],
+  "success_rate": {"backend": "75% (3/4 — the single failure is the unfixed ADMIN_EMAILS dedupe)", "frontend": "100% (composer width + mention popover verified)"},
+  "seed_data_creation": "Temporary TEST_iter28 user + session (saved-search API) and TEST_iter28_ui user + session (feed UI) created in MongoDB and deleted after the run. admin_email_digests docs created by the test were deleted and any pre-existing docs restored; admin_report_digest_sent_at values on real admin users were snapshotted and restored. Collection verified empty afterwards.",
+  "should_call_test_agent_after_fix": false,
+  "should_main_agent_self_test": true,
+  "test_credentials": "No passwords — sessions minted directly in MongoDB per /app/auth_testing.md.",
+  "context_for_next_testing_agent": "Run with: cd /app/backend && python -m pytest tests/test_iter28.py -v (pytest.ini injects xdist -n/--dist loadscope, so do not pass -p no:xdist). test_iter28.py loads /app/backend/.env into os.environ before importing scheduler/mailer/deps. The ADMIN_EMAILS test monkeypatches mailer.send_email, runs the job twice via asyncio.run against a fresh AsyncIOMotorClient, then restores state. Frontend: mint a session cookie for domain nw-sailing-community.preview.emergentagent.com and use [data-testid^='toggle-comments-'] (NOT 'comments-toggle-') to open the composer, then [data-testid^='comment-input-'].",
+  "rca_of_the_issue": "MongoDB upsert semantics: when an update_one filter contains a condition that no document satisfies (here sent_at is already fresh), upsert=True does not become a no-op — it derives a new document from the equality parts of the filter ({key: ...}) plus the $set and inserts it, returning upserted_id. The scheduler treats upserted_id as 'I won the claim' and sends the email, so every re-run duplicates both the email and the claim document. A unique index on 'key' plus an insert-then-conditional-update pattern is required for a correct claim."
+}

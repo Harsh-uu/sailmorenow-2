@@ -1,0 +1,35 @@
+{
+  "summary": "Iter 77 — Retested the 4 user-reported bug fixes from iter76 on shared backend + web + Expo mobile-web preview.\n\n=== FIX 1+3 — Avatar upload (mobile web preview) ✅ PASS ===\nBackend size limit is now MAX_BYTES=15*1024*1024 (was 10MB) in /app/backend/routers/storage_router.py:22 — matches the spec.\nMobile change: /app/mobile/app/(tabs)/profile.tsx:110-116 now (a) downscales via expo-image-manipulator (resize width 1024, JPEG 0.7) before upload AND (b) branches on Platform.OS==='web' to fetch(shrunk.uri).blob() and append the real Blob, fixing the iter76 web-preview 422. Verified end-to-end on the Expo web preview as jenn@sailmorenow.com: [data-testid=change-avatar-btn] → set_files(tiny.png) → GET /api/auth/me picture flipped from '/api/files/sailmorenow/avatars/user_4b6b1bb144d4/b9b569f8ce254279…' to '/api/files/sailmorenow/avatars/user_4b6b1bb144d4/c2ab59e6d4ff…'. Toast fires; hero avatar re-renders new URL. Both surfaces render user.picture BEFORE user.avatar (verified — mobile Avatar upstream in src/components/ui already normalizes /api/files/* → EXPO_PUBLIC_BACKEND_URL).\n\n=== FIX 2 — Crew Bank detail contact button + mobile formatting ✅ PASS ===\nSeeded a non-self listing as pro.marina@sailmorenow.dev (POST /api/crew-bank/standalone → 200) and confirmed on the Expo mobile-web preview (390x844) that tapping [data-testid=crew-standalone-seed_marina] opens a bottom sheet with:\n  • [data-testid=crew-detail-seed_marina] — content is padded (contentContainerStyle padding=20 in crew-bank.tsx:177), fully scrollable\n  • Positions (Tactician, Trimmer), Availability (Flexible), Notes ('TEST_iter77') all render with 6px section-label spacing\n  • Primary [data-testid=crew-detail-msg-seed_marina] 'Message Salish' button — full-width 350x50 at y=698 (well above 844 bottom, not clipped)\n  • [data-testid=crew-detail-close] Close (ghost) button below\n  • Own listings (seed_marina→admin swap) correctly show 'This is your listing' text instead of the Message button (crew-bank.tsx:199-205)\nMobile Message button routes to /messages/[id]?name=… on tap. WEB /crew-bank was fully verified in iter76 (crew-detail-modal + crew-detail-dm-<uid> on non-self, hidden on own) and no relevant web code changed since; delta today is mobile-only.\nCleaned up marina listing via DELETE /api/crew-bank/standalone → 200.\n\n=== FIX 4 — Revenue snapshot on MOBILE admin ✅ PASS ===\nLogged in as admin, tapped [data-testid=admin-dashboard-row] from Profile → [data-testid=admin-tab-overview]. The 'REVENUE SNAPSHOT' card [testID=admin-revenue] renders directly below the KPI grid with:\n  • [data-testid=rev-mrr] = $170.93\n  • [data-testid=rev-arr] = $2,051\n  • [data-testid=rev-active] = 9\n  • [data-testid=rev-total] = 38\n  • 6 per-tier rows [data-testid=rev-tier-<account_type>-<tier>]\nAll numbers match backend GET /api/admin/revenue exactly (mrr_total 170.93, arr_total 2051.16, active_paid 9, total_users 38). Web /admin/analytics revenue card was verified in iter76 and is unchanged.\n\n=== Minor mobile UX note ===\nDirect load of https://…expo.preview…/admin (without prior /profile visit to warm the AuthContext) triggers admin.tsx:26 `if (!user) return <Redirect href='/'/>` before user hydrates, so the user lands on Hub instead of Admin. Navigating admin dashboard row from Profile works perfectly. Low priority — a Loading spinner while `user==null` (rather than the redirect) would make the deep-link case work. Not part of the 4 reported bugs.",
+  "platforms_tested": ["web", "mobile"],
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "web": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+    "mobile": {
+      "ui_bugs": [
+        {"component": "admin.tsx", "issue": "Direct deep-link to /admin can redirect to '/' before AuthContext hydrates because `if (!user) return <Redirect href='/'/>` fires on the first render pass. Show a <Loading/> when user is null (only redirect after auth actually resolves to non-admin). Reference: /app/mobile/app/admin.tsx:26.", "testID": "admin-tab-overview", "priority": "LOW"}
+      ],
+      "integration_issues": [],
+      "design_issues": [],
+      "react_native_issues": []
+    }
+  },
+  "parity_issues": [],
+  "test_report_links": [],
+  "action_items": [
+    "LOW (optional polish): In /app/mobile/app/admin.tsx replace the early `if (!user) return <Redirect href='/'/>` with a `Loading` view when user is null; only redirect after user resolves to non-admin. This makes /admin deep links work without a warm-up nav from /profile."
+  ],
+  "critical_code_review_comments": [
+    "The Platform.OS==='web' Blob branch in profile.tsx changeAvatar is clean and small; combined with the pre-upload ImageManipulator downscale (1024 max width, JPEG 0.7), the upload is fast and works consistently in the Expo web preview. Fixes iter76's parity gap.",
+    "Backend MAX_BYTES=15MB covers iPhone camera photos (typical HEIC-transcoded JPEGs are ~4–8 MB; PNG screenshots are ~2–4 MB). Combined with client-side resize, real-world avatars will always be well under the ceiling.",
+    "Mobile crew-detail sheet uses ScrollView with contentContainerStyle={{ padding: 20, paddingBottom: 36 }} — properly padded and the Message primary Button sits above the Close ghost with a 10px spacer, matching web's stacked layout. Message-vs-self branch is symmetric between web (CrewBank.jsx:271) and mobile (crew-bank.tsx:199-205).",
+    "Revenue card layout on mobile uses a 2-column flexWrap grid for the 4 KPIs (mrr/arr/active/total) followed by per-tier rows separated by a hairline — mirrors the web design tokens (brandPrimary bg, F2A03B accent icon) and matches admin/analytics on web."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "100% (revenue + avatar round-trip + crew-bank standalone all 200)", "frontend": "web 4/4 fixes verified (iter76 + this iter), mobile 4/4 fixes verified this iter"},
+  "test_credentials": "jenn@sailmorenow.com / [REDACTED] (admin). Minted a session for pro.marina@sailmorenow.dev via test_credentials.md snippet to seed a non-self crew-bank listing.",
+  "seed_data_creation": "Temporarily POST /api/crew-bank/standalone as pro.marina@sailmorenow.dev (seed_marina), then DELETE — cleanup verified (200).",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "All 4 iter77 bug fixes verified on both surfaces. The one remaining mobile polish item is the /admin deep-link redirect race (admin.tsx:26) — not user-reported. iter76's crew-bank + revenue + avatar web verifications remain valid (no web code changed today). For mobile testing, prefer to warm auth by visiting /profile before deep-linking to /admin. `pro.marina@sailmorenow.dev` (seed_marina, premium) remains the go-to for gated crew-bank listing tests.",
+  "rca of the issue": ""
+}

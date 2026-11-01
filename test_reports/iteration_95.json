@@ -1,0 +1,33 @@
+{
+  "summary": "Iter 95 — Frontend-only verification of the WEB /org-listing LOGO bug fix + new COVER PHOTO crop + Public Preview + extras gallery (showSetCover=false). All 7 scenarios PASS on web for both PSSS (Community Partner, no logo, 3 photos) and WTYC (regular org, has logo, 1 photo). The logo placeholder bug is fixed — PSSS with null logo now shows a circular dashed container with the burgee/flag icon centered (data-testid logo-placeholder) plus an 'Upload a logo' button (logo-pick); no broken image anywhere on the page. logo-crop-modal opens from logo-pick with logo-zoom + logo-crop-cancel (closes cleanly). COVER FEATURE verified: cover-uploader renders; PSSS shows cover-current with cover-change + cover-remove; cover-change opens cover-crop-modal with cover-crop-save + cover-crop-cancel (closes cleanly); cover-remove on a CP with extras cleanly promotes the first extra to the new cover (expected cascade per OrgListing.jsx:77). Public Preview (cover-public-preview) renders with cover-preview-img, the correct tier badge ('Community Partner' gold for PSSS, 'Club / Org' teal for WTYC), live logo + name + @handle updates (verified by typing a new org name — preview updated instantly). Extras gallery for PSSS (CP) shows 2 items (3 total − 1 cover), 0 gallery-cover-badge and 0 gallery-set-cover-* buttons (showSetCover=false working as spec), gallery-caption-N inputs editable, 2 gallery-remove-* and gallery-add present. For WTYC (regular org) the entire 'More photos' section + org-gallery-editor are hidden (galleryMax=0, max_photos=1). No stale 'Event flyer' label anywhere on the page.",
+  "platforms_tested": ["web"],
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "web": {
+      "ui_bugs": [],
+      "integration_issues": [],
+      "design_issues": []
+    },
+    "mobile": {"ui_bugs": [], "integration_issues": [], "design_issues": [], "react_native_issues": []}
+  },
+  "parity_issues": [],
+  "test_report_links": [],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "LogoUploader.jsx L38 useEffect correctly resets `broken` whenever `value` changes, so selecting a fresh file (or receiving a new URL) clears any prior null/invalid error state cleanly — matches the bug-fix spec.",
+    "LogoUploader.jsx L70 img onError={() => setBroken(true)} makes hasLogo flip to false and re-render the placeholder, so an unreachable/invalid logo URL falls back to the burgee placeholder (not a broken image icon). Verified by code review — would need a DB-level invalid URL to exercise at runtime.",
+    "CoverPhotoUploader.jsx mirrors the same broken/useEffect pattern (L39, L41, L75), so an invalid cover URL also falls back to the cover-placeholder cleanly.",
+    "OrgListing.jsx L77 `setCover('')` sets photos to just `extras`, which means removing the cover on a CP with extras promotes the first extra to the new cover. This is sensible UX cascade but note that for regular orgs (no extras) cover-remove cleanly returns to cover-placeholder (which was not exercised at runtime but is implied by the same code path with empty extras).",
+    "OrgListing.jsx L127 `galleryMax > 0` gate correctly hides both the 'More photos' label AND the OrgGalleryEditor for regular orgs (max_photos=1 → galleryMax=0). Verified on WTYC.",
+    "OrgListing.jsx L131 passes `showSetCover={false}` to OrgGalleryEditor; OrgGalleryEditor.jsx L45/L51 correctly gate both the cover badge and the 'Set as cover' button on `showSetCover`, so mobile (default true) is unaffected — nice parity-preserving flag.",
+    "Public preview (OrgListing.jsx L101-124) uses the `isCP` state + live form.{org_name,handle,logo_url} + cover.url, so it updates reactively as the user edits — verified by typing a new org name on WTYC. No API round-trip needed for the preview."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A (skipped per request)", "frontend": "100% web (all 7 scenarios pass)"},
+  "test_credentials": "Mongo-minted session_token cookies: PSSS (CP, handle pugetsoundsailingsoc) = test_session_iter95_psss_1791567672071; WTYC (regular org, handle whitetrashyachtclub) = test_session_iter95_wtyc_1791567672074. Both set as httpOnly session_token cookie on boat-community-1.preview.emergentagent.com.",
+  "seed_data_creation": "No seed data created. Only mutations during tests were (a) typing an in-memory org_name on WTYC's unsaved form (not persisted — Save button was not clicked), and (b) in-memory cover-remove on PSSS (not persisted). Both orgs' DB state is unchanged.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Web /org-listing bug-fix + cover-crop feature fully verified. Scope was explicitly WEB-ONLY (mobile unchanged — not tested). If adding regression coverage later: (1) exercise the img.onError fallback by injecting an unreachable logo_url via DB and reloading — would land on logo-placeholder with the broken-state message; (2) exercise logo-crop-save / cover-crop-save end-to-end with setInputFiles of a larger valid PNG (the 1x1 PNG used here mounts the cropper but produces a tiny crop, so the Save-roundtrip to /u/{handle} wasn't exercised at runtime — main agent self-verified via screenshot in context_note). Both test tokens remain valid for ~7 days.",
+  "rca of the issue": "N/A — this round validated an existing bug fix (replace broken-img state in LogoUploader with a burgee-icon placeholder + onError fallback) and the new CoverPhotoUploader + Public Preview + showSetCover={false} wiring. All verified working."
+}

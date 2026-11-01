@@ -1,0 +1,34 @@
+{
+  "summary": "Iter 82 — E2E of 6 features on shared backend + web + mobile: threshold rules, admin content_hidden notifications, following search, landing engagement bar, crew positions (no Helm/Navigator), admin event edit (incl. aggregator).\n\n=== BACKEND ✅ 6/6 pass (/app/backend/tests/test_iter82_threshold_notifications_edit.py) ===\n  • GET /api/crew-positions no longer contains 'Helm' or 'Navigator'.\n  • PUT/GET /api/admin/moderation-settings works. Admin-only enforced.\n  • Threshold flow: PUT threshold=2 → 1st inaccurate report keeps post visible (hidden=false); 2nd distinct-user inaccurate report → hidden=true, post drops from GET /api/posts, and admin gets a NEW notification kind='content_hidden' link='/admin/reports'.\n  • Threshold=0: 3 distinct inaccurate reports never hide the target.\n  • Inappropriate flag still hides on the first report.\n  • PATCH /api/admin/events/{event_id} edits an aggregator-sourced event (title/organizer_name/organizer_email/registration_url/location/description), sets admin_edited=true. Non-admin PATCH → 401/403.\n\n=== WEB ✅ (jenn admin, 1440x900) ===\n  • / Landing engagement-bar renders with stat-members=69 / stat-boat=4 / stat-upcoming=21 / stat-pnw=10; the literal string 'Early access' is NOT on the page; cta-signup-btn + See pricing link remain.\n  • /admin/reports: moderation-threshold-card present with threshold-input + threshold-save. Changed 2→4, reloaded page, value persisted as 4. report-category-* and report-hidden-* badges rendered on existing reports.\n  • /admin/events: 21 edit-event-{id} buttons, 16 aggregator events. Clicking edit opens event-edit-modal with ALL 8 fields (title, organizer_name, organizer_email, registration_url, location, market, description, starts_at). edit-event-save PATCH succeeds and closes modal + refreshes list.\n  • /following: following-search input renders; typing an unmatched query surfaces following-no-match state.\n  • /crew-bank: page body has no 'Helm' or 'Navigator' text (positions list clean).\n\n=== MOBILE (Expo web preview, 390x844) ✅ ===\n  • /following-list: following-search present, unfollow-{uid} tap target rendered (1 followed).\n  • /crew-bank: verified toggle + Jenn's standalone listing card render. Tapping the card opens crew-detail sheet with 'Close' button (testID crew-detail-close) styled as a BORDERED PILL (border-width 1.5px, rgb(203,213,225), rounded 999px, padding 12px) — readable in both light and dark modes. Positions listed on the card: Foredeck, Grinder, Mainsheet, Any — NO Helm/Navigator visible.\n\nParity: identical outcomes on web + mobile for Following search and crew-positions purge. Notification (7 unread bell after threshold trigger) confirmed via admin UI header.",
+  "platforms_tested": ["web", "mobile"],
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "web": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+    "mobile": {"ui_bugs": [], "integration_issues": [], "design_issues": [], "react_native_issues": []}
+  },
+  "parity_issues": [],
+  "test_report_links": [
+    "/app/backend/tests/test_iter82_threshold_notifications_edit.py",
+    "/app/test_reports/pytest/iter82_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "reports_router.create_report: distinct-user counting is enforced implicitly because each reporter can only have ONE open report per target (idempotent create), so count_documents({category:'inaccurate', status:'open'}) == distinct-open-reporters. Correct match with PRD wording 'Nth DISTINCT-open inaccurate report'.",
+    "reports_router._notify_admins_hidden: guarded by 'already' hidden check to prevent duplicate notifications if the item was previously auto-hidden (e.g. dismissed-then-re-flagged). Good idempotency.",
+    "admin_router.admin_update_event: uses EventAdminUpdate (extends EventUpdate) so admins can also set organizer_name/organizer_email — the owner-scoped PATCH /events/{id} cannot. Bypasses the aggregator lock. Sets admin_edited=true + updated_at. Solid.",
+    "AdminReports threshold input has min=0/max=100 attrs and the save button is disabled when the value equals the last saved value — nice UX."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter82_threshold_notifications_edit.py"
+  ],
+  "success_rate": {
+    "backend": "100% (6/6 pytest cases)",
+    "frontend": "web 5/5 flows PASS, mobile 2/2 flows PASS"
+  },
+  "test_credentials": "Admin: jenn@sailmorenow.com / [REDACTED] Web via cookie (session_token), mobile via localStorage.session_token JSON-encoded.",
+  "seed_data_creation": "Backend tests created ~3 posts (TEST82-prefixed) and 6 disposable users (iter82_*@example.com). 5 content_hidden notifications on the admin from the threshold test. No aggregator events were mutated in a way that breaks scraping (admin_edited=true is now set on one aggregator event; title was suffixed with '[WEB82]' during UI test — safe to leave, cleanup optional).",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "All 6 iter82 features verified end-to-end. (a) threshold state is persisted as integer at db.app_settings id='moderation'. Tests leave it at 0 (off). Web UI test also resets to 0. (b) crew-detail-close in mobile crew-bank uses inline border style, safe under dark theme. (c) EventAdminUpdate schema adds organizer_name/organizer_email on top of EventUpdate — do NOT try those fields against owner-scoped PATCH /events/{id}. (d) content_hidden notifications are created 1-per-admin (jenn today = only 1 admin user). (e) Aggregator event edit via UI mutates title in the DB but the aggregator scraper reconciles by source_key so the manual edit is preserved unless the source refreshes — worth verifying on next full ingest.",
+  "rca of the issue": ""
+}

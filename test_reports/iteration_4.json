@@ -1,0 +1,35 @@
+{
+  "summary": "Iteration 4 verification: (1) Router-refactor smoke passes — all 9 public endpoints (/, /markets, /events, /boat-pros, /posts, /reviews, /crew-positions, /crew-bank/open, /payments/packages) return 200. (2) Auth-gated endpoints correctly return 401/200 and admin gating returns 401/403/200 as expected. (3) WebSocket at /api/ws/{user_id}?token= rejects invalid tokens (403 upgrade) and accepts valid ones (101). (4) NEW is_race: POST /events with is_race:true stores + returns is_race=true; GET /events lists it; premium can join, free gets 402. (5) NEW Resend mailer hook: aggregator events (no organizer_email) do NOT log any [mailer] activity; community events with organizer_email fire the Emergent proxy — logs show 'HTTP/1.1 202 Accepted' and '[mailer] sent to=jenn@sailmorenow.com id=...' — no exceptions/5xx. (6) Prior iteration 3 (test_crew_bank_v3.py) and iteration 2 (test_events_aggregator_bugfix.py) tests still pass unchanged (4 skips are pre-existing admin-only tests requiring a different token). (7) Frontend modal glitch fix verified via Playwright: outer div class is 'fixed inset-0 z-[60] ...', inner scroll container class contains 'overflow-y-auto overscroll-contain flex-1 min-h-0', body.style.overflow='hidden' while open and restored on close, Escape closes the modal. (8) IS_RACE checkbox present on /events new-event form with data-testid='event-is-race' and label 'This is a race (enables Crew Bank)' — toggles correctly.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Events → Post event form", "issues": ["datetime-local inputs use the browser's default date picker instead of a shadcn Calendar component — inconsistent UX with the rest of the app. Purely cosmetic."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_refactor_v4.py",
+    "/app/backend/tests/test_crew_bank_v3.py",
+    "/app/backend/tests/test_events_aggregator_bugfix.py",
+    "/app/test_reports/pytest/iter4_all.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "server.py refactor is clean (60 lines) and every router is properly prefixed under /api. Nice work.",
+    "community_router.py is now ~360 lines and still bundles posts + events + registrations + crew bank + aggregator-admin — consider splitting crew_bank into its own router file since it now has its own mailer side-effect and status endpoint.",
+    "deps.py: current_user_from_token silently returns None on any DB miss; consider structured logging on token-mismatch for debugging (currently only visible in tests when a request unexpectedly comes back 401).",
+    "_maybe_email_organizer creates a fire-and-forget asyncio.create_task without keeping a reference — if the event loop is shutting down mid-request the task will be logged as 'Task was destroyed but it is pending'. Consider storing the task on a background-tasks set or using FastAPI BackgroundTasks.",
+    "mailer.py: EMAIL_BASE_URL is intentionally hardcoded (per playbook) — that's fine but leave a comment tying it back to the playbook doc URL for future maintainers."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_refactor_v4.py (new — 27 tests: refactor smoke, auth gating, is_race feature, mailer hook, WS auth)"
+  ],
+  "success_rate": {"backend": "100% (38/38, 4 pre-existing skips)", "frontend": "100% functional"},
+  "test_credentials": "ADMIN_TOKEN=test_tok_test-admin-1784756320844-628 (jenn@sailmorenow.com, platform_role=admin, premium). PREMIUM_TOKEN=test_tok_test-user-1784756320856-596 (subscription_tier=premium, market=Bellingham). FREE_TOKEN=test_tok_test-user-1784756320858-732. All 3 sessions valid until 2026-07-29.",
+  "seed_data_creation": "Test suite creates two community events (TEST_RaceFlag_v4, TEST_MailerHook_v4) with is_race:true owned by ADMIN, joins them from PREMIUM, and cleans up crew_bank entries on teardown. Event docs themselves remain in db.events (harmless; TEST_ prefix). Two organizer notification emails were sent to jenn@sailmorenow.com via the Emergent proxy (Resend id d0c9abb6-... and 0b0b9a92-...).",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Run backend tests with `REACT_APP_BACKEND_URL=<url> pytest -n 0 backend/tests/`. pytest.ini forces -n 2 loadscope; the crew_bank tests share a single row and MUST run sequential (-n 0). WS tests use `websockets` lib (already installed). The Emergent email proxy is real and returns 202 with an id — expect Jenn's inbox to receive TEST_MailerHook / TEST_RaceFlag notifications.",
+  "rca of the issue": "No regressions found from the refactor. All 6 routers wire up correctly under /api prefix. Modal fixes (z-[60], min-h-0 scroll container, body-lock, Escape) all verified via live DOM inspection. is_race and Resend mailer both implemented per spec and working end-to-end."
+}

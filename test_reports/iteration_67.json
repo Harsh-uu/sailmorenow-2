@@ -1,0 +1,38 @@
+{
+  "summary": "Iteration 67: All four items verified across web + mobile + shared backend. WEB Light/System/Dark theme picker works (menu opens, options set html.dark, persist to localStorage 'smn-theme', survive reload, and System live-follows emulated OS scheme). Orange (#F2A03B) CTAs render with dark ink text rgb(16,35,58) = #10233A in BOTH light AND dark modes (contrast ~7.2:1 vs orange, WCAG AAA). MOBILE market memory: selecting 'Greater Seattle' on Hub is remembered as active chip on Events (market-chip-Greater Seattle, bg rgb(31,63,91)) and Crew Bank (crew-market-Greater Seattle), and persists across reload; localStorage 'smn-market-pref' updates. MOBILE 'My markets' selectable via market-opt-mine; Hub button label becomes 'My markets'. Profile has 'MARKETS YOU FOLLOW' row with edit-markets-row -> modal with 10 follow-market-<name> checkboxes + save-markets-btn; PATCH /api/auth/markets returned updated markets and kept primary_market='Greater Seattle' when Bellingham was added (revert clean). Backend: 7/7 pytest passes covering markets CSV filter on /posts /events /discussions /crew-bank/open /crew-bank/standalone, PATCH /auth/markets keeping primary, and RSVP (POST /events/{id}/register kind=attendee) creating an 'event_rsvp' notification for the organizer. Mobile Appearance section still present with testIDs theme-light/system/dark (regression clean). Dark-mode readability intact (body rgb(11,18,32), h1 white).",
+  "platforms_tested": ["web", "mobile"],
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "web": {
+      "ui_bugs": [],
+      "integration_issues": [],
+      "design_issues": []
+    },
+    "mobile": {
+      "ui_bugs": [],
+      "integration_issues": [],
+      "design_issues": [],
+      "react_native_issues": []
+    }
+  },
+  "parity_issues": [
+    {"flow": "Theme toggle testID naming", "platform": "web", "issue": "Header ThemeToggle renders with data-testid='theme-toggle' (component default) instead of the spec's 'theme-toggle-btn'. Not blocking (menu + options 'theme-opt-light/system/dark' work), but review-request selector doesn't match.", "expected": "data-testid='theme-toggle-btn' on the header trigger", "actual": "data-testid='theme-toggle' (default testId prop in /app/frontend/src/components/ThemeToggle.jsx L15). Header should pass testId='theme-toggle-btn' when mounting it."}
+  ],
+  "test_report_links": ["/app/backend/tests/test_iter67_markets_notifs.py", "/app/test_reports/pytest/iter67_results.xml"],
+  "action_items": [
+    "OPTIONAL: pass testId='theme-toggle-btn' to <ThemeToggle /> in the web header so it matches the spec (mobile uses theme-light/system/dark IDs which already match the mobile spec)."
+  ],
+  "critical_code_review_comments": [
+    "marketPref.ts default is 'mine' via module-level `let _v: MarketPref = \"mine\"`; storage seed is best-effort (silent catch). Fine for MVP but note first paint after cold reload can briefly show 'mine' before AsyncStorage hydrates a saved value — didn't visibly flicker in testing but worth remembering.",
+    "community_router.py L613-623: RSVP-organizer notify wrapped in try/except that only swallows exceptions; verified the happy path works. `notify()` is not awaited for self-RSVP (org_id==user_id early return), which correctly avoids self-notify.",
+    "ThemeContext.jsx correctly guards `window` in initialPref/systemScheme for SSR safety and adds an mql listener with cleanup. Meta theme-color updates on transition. LGTM."
+  ],
+  "updated_files": ["/app/backend/tests/test_iter67_markets_notifs.py"],
+  "success_rate": {"backend": "100% (7/7)", "frontend": "100%"},
+  "test_credentials": "Minted seed_marina token test_session_mobile_1789103018713 for mobile localStorage seeding. Backend pytest mints per-test tokens via mongosh (captain.jane, crew.alex, pro.marina).",
+  "seed_data_creation": "One TEST_RSVP_* event created and left behind by pytest (organizer captain.jane). Bellingham was temporarily added to seed_marina.markets then reverted; final state matches iteration_66 baseline (Greater Seattle, Kirkland, Everett).",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Everything for iter67 features passes. Reusable regression test: /app/backend/tests/test_iter67_markets_notifs.py (7 tests). For mobile UI: seed 'session_token' JSON-encoded into localStorage before nav, use 428x920 viewport, wait ~5s per screen for AuthContext + AsyncStorage hydration. Note: RSVP endpoint is POST /api/events/{id}/register with body {kind:'attendee'|'volunteer'} (NOT /rsvp). Web theme trigger currently uses testID 'theme-toggle' (not 'theme-toggle-btn' as request wrote).",
+  "rca of the issue": "N/A - no bugs found. Only note: initial pytest failure on RSVP was tester-side (used wrong endpoint /rsvp and wrong response shape assumption). Fixed to POST /events/{id}/register and handled notifications response shape {items,unread}. Retest passed."
+}

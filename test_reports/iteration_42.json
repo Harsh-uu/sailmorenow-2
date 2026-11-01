@@ -1,0 +1,51 @@
+{
+  "summary": "BLOCKER: None of the four Phase S (iteration 42) features exist in the codebase. The working tree is still at the Phase R commit (e400912 'Phase R complete') with zero uncommitted source changes (git status shows only untracked .env / yarn.lock). Verified by static grep across backend/routers/*.py, backend/schemas.py, frontend/src/App.js, DirectoryDetail.jsx, AdminContact.jsx (0 matches for 'photos', '/reply', '_HANDLE_AVAIL_RATE', '@:handle') AND by live black-box testing against the public URL. New regression suite /app/backend/tests/test_iter42_phase_s.py: 2 passed / 4 failed (the 2 passes are trivial pre-existing behaviour). Phase R regression suite re-run after re-seeding: 23/23 PASS, so the app itself is healthy and un-regressed — the Phase S work was simply never written.",
+  "backend_issues": {
+    "critical": [
+      {"endpoint": "GET /api/handle/available", "issue": "NOT IMPLEMENTED — no rate limiting exists. 31 sequential requests with identical X-Forwarded-For: 9.9.9.9 all returned 200 (expected 31st = 429). No _HANDLE_AVAIL_RATE dict anywhere in admin_router.py; handle_available() at admin_router.py:222-230 takes only `q: str` and has no Request/IP parameter. Handle-enumeration oracle remains open (carried over from iter40/41 review notes).", "priority": "CRITICAL"},
+      {"endpoint": "POST /api/admin/contact/{msg_id}/reply", "issue": "ROUTE DOES NOT EXIST — returns 404 {\"detail\":\"Not Found\"} unauthenticated, not 401. admin_router.py only defines GET /admin/contact (line 233). No Resend/mailer reply send, no contact_messages.replies append, no status='replied'/last_reply_at write. The review request's claim 'Live-verified: reply unauth = 401' is INCORRECT.", "priority": "CRITICAL"},
+      {"endpoint": "POST /api/boat-pros (BoatProUpsert)", "issue": "NO photos FIELD — BoatProUpsert (schemas.py:19-32) declares company_name/logo_url/photo_url/short_bio/website/contact_email/contact_phone/categories/markets/tier/certifications/licenses/insurance only; 'photos' absent from model_fields. directory_router.py has zero 'photos' references, so no cap-6/dedup/strip clamp exists. GET /api/boat-pros returns documents with no 'photos' key. Any client posting photos=[...] has it silently dropped by Pydantic.", "priority": "CRITICAL"}
+    ],
+    "minor": [
+      {"endpoint": "n/a (test harness)", "issue": "test_iter40_phase_r.py depends on hardcoded seed fixtures (test_sess_iter40_a/b/admin, handle test40alpha, TEST_iter40 contact rows) that had been cleaned up, so it failed 11/23 on a cold run. Re-running backend/tests/seed_iter40_ui.py restored 23/23. Consider converting that seed script into a module-scoped autouse pytest fixture so the suite is self-contained."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "App.js router", "issue": "NO /@:handle route alias. Navigating to /@captainjane falls through to the <Route path=\"*\"> wildcard and redirects to '/' (landing page). handle-profile-page count = 0. Control /u/captainjane works correctly (handle-profile-page present, handle-label = '@captainjane'), so HandleProfile itself is fine — only the alias route is missing.", "selector": "[data-testid=\"handle-profile-page\"]", "priority": "CRITICAL"},
+      {"component": "DirectoryDetail.jsx", "issue": "NO pro-photos-gallery. /directory/seed_marina renders with pro-photos-gallery count = 0 and the file contains zero 'photos' references — the 3-column gallery and pro-photo-<i> tiles were never added. (Note: this is also data-gated since the backend has no photos field, so both layers are missing.)", "selector": "[data-testid=\"pro-photos-gallery\"]", "priority": "HIGH"},
+      {"component": "AdminContact.jsx", "issue": "NO ReplyComposer. 'reply-composer' does not appear anywhere in the served DOM on /admin/contact and the source has zero '/reply', 'reply-body' or 'reply-send' references. Missing testids: reply-composer-<id>, reply-body-<id>, reply-send-<id>, contact-replies-<id>.", "selector": "[data-testid^=\"reply-composer-\"]", "priority": "HIGH"}
+    ],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter42_phase_s.py",
+    "/app/test_reports/pytest/iter42_results.xml",
+    "/app/backend/tests/test_iter40_phase_r.py"
+  ],
+  "action_items": [
+    "Implement ALL FOUR Phase S features — none are present. The prior agent's implementation appears to have been lost or never saved to disk.",
+    "1) admin_router.py: add _HANDLE_AVAIL_RATE in-memory dict + prune-per-request (mirror the existing /contact throttle), change handle_available(q) to accept Request, key on X-Forwarded-For first hop, 30 hits / 60s -> HTTPException(429).",
+    "2) schemas.py: add `photos: List[str] = []` to BoatProUpsert; directory_router.py upsert: strip each entry, drop empties, dedup preserving order, slice [:6] before persisting; ensure GET /api/boat-pros and /api/boat-pros/{id} project photos.",
+    "3) admin_router.py: add POST /admin/contact/{msg_id}/reply -> require_admin (401 unauth / 403 non-admin), 404 unknown msg_id, 400 when len(body.strip())<5 or >6000, send via mailer/Resend, $push reply {id,body,at,by,by_name,delivered} onto contact_messages.replies and $set status='replied' + last_reply_at.",
+    "4) App.js: add <Route path=\"/@:handle\" element={<HandleProfile />} /> BEFORE the wildcard route. NOTE: react-router v6 treats ':handle' as the param but the literal '@' prefix must be part of the path segment — verify the param value does not include a stray '@' in HandleProfile's lookup.",
+    "5) DirectoryDetail.jsx: render data-testid='pro-photos-gallery' with pro-photo-0..5 tiles only when pro.photos?.length > 0, inside the hero card between the photo_url avatar and the info section.",
+    "6) AdminContact.jsx: add inline ReplyComposer (reply-composer-<id>, reply-body-<id>, reply-send-<id>) with loading/error/success states, and a contact-replies-<id> list rendering prior replies.",
+    "Re-run /app/backend/tests/test_iter42_phase_s.py after implementation — it is written to assert the target behaviour and currently fails 4/6."
+  ],
+  "critical_code_review_comments": [
+    "The review request states 'Live-verified: 30x 200 + 1x 429; reply unauth = 401' — both claims are false against the running app (31st = 200; reply = 404). Verify claims against the actual served build before handing off to test.",
+    "handle_available() at admin_router.py:222 does an unindexed-shape lookup on db.users.find_one({'handle': ...}) with no auth and no throttle — the enumeration risk flagged in iter40 and iter41 is still open, now for a third consecutive iteration.",
+    "When adding photos, cap the per-URL string length too (a 6-element array of unbounded strings is an easy payload-bloat vector on the boat_pros document).",
+    "For the reply endpoint, do not let a mailer failure abort the DB write silently — set delivered:false and still return 200 so the admin sees the attempt, or return 502 explicitly; pick one and make the UI reflect it."
+  ],
+  "updated_files": ["/app/backend/tests/test_iter42_phase_s.py", "/app/test_reports/iteration_42.json"],
+  "success_rate": {"backend": "0% of Phase S features implemented (new suite 2/6 pass, both passes are trivial pre-existing behaviour); Phase R baseline 23/23 = 100%", "frontend": "0% of Phase S features implemented (3/3 UI targets absent); /u/:handle control path works"},
+  "seed_data_creation": "Re-ran /app/backend/tests/seed_iter40_ui.py to restore iter40 fixtures (users test-iter40-a/b/admin, sessions test_sess_iter40_a/b/admin, thread with 2 unread, handle test40alpha, 2 TEST_iter40 contact rows). These are still present in test_database and can be reused. My own Phase S tests use random X-Forwarded-For IPs and create no persistent data.",
+  "should_call_test_agent_after_fix": true,
+  "should_main_agent_self_test": false,
+  "test_credentials": "Emergent Google OAuth; no passwords. Mint Mongo sessions per /app/auth_testing.md. Available now: test_sess_iter40_admin (platform_role admin), test_sess_iter40_a, test_sess_iter40_b.",
+  "context_for_next_testing_agent": "Phase S was NOT implemented at all — I could not test any of the four features' behaviour, only their absence. /app/backend/tests/test_iter42_phase_s.py is ready and asserts the intended Phase S contract (throttle 30/60s, photos field, reply route 401-unauth); re-run it once the main agent ships the code, then extend it with the full reply matrix (403 non-admin using a non-admin session, 404 unknown id, 400 body<5/>6000, 200 admin + replies-array persistence check via GET /api/admin/contact) and the photos cap-6/dedup/strip upsert test (needs a boat_pro or admin session). Frontend targets to verify after fix: /@captainjane -> handle-profile-page + handle-label '@captainjane'; pro-photos-gallery with pro-photo-0..5 on a DirectoryDetail whose pro has photos; reply-composer-<id>/reply-body-<id>/reply-send-<id> then contact-replies-<id> on /admin/contact. Still untested/data-gated from earlier iterations: DirectoryDetail pro-credentials and mutual-scorecard sections (no boat_pro has certifications/licenses/insurance; mutual_reviews empty).",
+  "rca_of_the_issue": "Root cause: the Phase S code changes were never written to disk. Evidence: (a) `git log --oneline -1` = e400912 'Phase R complete'; (b) `git status --short` shows only untracked backend/.env, frontend/.env, yarn.lock files — no modified source files; (c) grep for 'photos', '/reply', '_HANDLE_AVAIL_RATE', '@:handle' across backend/routers/*.py, backend/schemas.py, frontend/src/App.js, DirectoryDetail.jsx and AdminContact.jsx returns 0 matches; (d) live black-box confirms all four absent (31st availability request = 200, reply route = 404, boat_pros payload has no photos key, /@captainjane redirects to /). Both frontend and backend are running and healthy (Phase R suite 23/23 after re-seeding), so this is not a hot-reload or stale-bundle false negative like iter40's. Mitigation: main agent must re-apply the Phase S edits to the six files listed in files_of_reference and confirm on disk before requesting retest."
+}

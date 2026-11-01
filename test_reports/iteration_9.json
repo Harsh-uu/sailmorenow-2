@@ -1,0 +1,43 @@
+{
+  "summary": "Phase C (Standalone Crew Bank) full-stack verification. Wrote /app/backend/tests/test_phase_c.py (36 tests, xdist-safe RUN_PREFIX 'TEST_userC_', full teardown) covering POST/GET/GET-mine/PATCH-status/POST-renew/DELETE on /api/crew-bank/standalone plus Phase A/B regression — 36/36 passed. Re-ran test_phase_a.py + test_phase_b.py untouched: 53/53 passed. Frontend /crew-bank tested via Playwright with mongo-minted premium and free sessions: anon empty state, paid listing flow (create -> mine-summary -> found/reopen -> renew -> remove), free-tier upsell gate, DM link on other sailors' cards, and market scoping all work. No blocking issues found.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "GET /api/crew-bank/standalone", "issue": "`count` is the page size (len(entries)) after the limit/skip, not the total matching listings. Once >60 sailors are listed the UI cannot show a true total or paginate."},
+      {"endpoint": "GET /api/crew-bank/standalone", "issue": "Query allows expires_at:None as 'never expires'. No endpoint ever writes null, so this branch is dead but would silently expose any manually inserted permanent listing."},
+      {"endpoint": "POST /api/crew-bank/standalone", "issue": "No length caps on experience/notes/availability strings (StandaloneCrewUpsert has no max_length), and positions/markets lists are unbounded — a client can store arbitrarily large text/arrays."},
+      {"endpoint": "POST /api/crew-bank/standalone", "issue": "Stores user_bio in the doc but no endpoint/UI consumes it; dead field (cosmetic)."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "/crew-bank (all states)", "issues": ["Sonner toasts render top-center and overlay the header nav, covering the 'Events'/'Crew Bank' links for the toast duration — nav items are unclickable while a toast is up. Consider top-right or below-header offset."]},
+      {"screen": "/crew-bank after marking 'Found a boat'", "issues": ["Own listing correctly disappears from the public grid, but the grid then shows the generic 'No sailors listed yet.' empty state while the 'Your listing' block still says Found a boat — slightly confusing; an inline 'your listing is hidden while marked found' hint would help."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_phase_c.py",
+    "/app/test_reports/pytest/phase_c_iter9.xml"
+  ],
+  "action_items": [
+    "Optional: return a true total count (count_documents) alongside the page in GET /api/crew-bank/standalone and add skip/pagination for >60 listings.",
+    "Optional: add max_length constraints to StandaloneCrewUpsert (experience/notes/availability) and cap positions/markets list sizes.",
+    "Optional UX: offset toasts so they don't overlay header nav links on /crew-bank."
+  ],
+  "critical_code_review_comments": [
+    "All six standalone endpoints correctly exclude _id, and the public list projects out user_email; /mine correctly returns it to the owner only — verified by assertions.",
+    "Upsert uses $setOnInsert for created_at so re-POST preserves creation time, refreshes expires_at (+90d) and never duplicates (countDocuments == 1) — verified.",
+    "Paid gating uses server-side is_paid_subscriber (402 for free) and the frontend gate is only cosmetic — correct defense-in-depth; free-tier POST is rejected server-side even if the disabled button is bypassed.",
+    "CrewBank.jsx is ~306 lines and readable, but the standalone modal form body is a good candidate for extraction if more fields are added."
+  ],
+  "updated_files": ["/app/backend/tests/test_phase_c.py"],
+  "success_rate": {"backend": "100% (36/36 Phase C, 53/53 Phase A+B regression)", "frontend": "100% (all Phase C flows)"},
+  "seed_data_creation": "Mongo-minted TEST_userC_* users/sessions (premium/featured/basic/free) and crew_bank_standalone docs; all deleted after the run (crew_bank_standalone count back to 0, no TEST_userC_* users remain). seed crew.alex identity_verified=true preserved and asserted.",
+  "should_call_test_agent_after_fix": false,
+  "should_main_agent_self_test": true,
+  "test_credentials": "No app passwords. Mint mongo sessions per /app/auth_testing.md; helper mint_user() in tests/test_phase_c.py (set subscription_tier for paid gating).",
+  "context_for_next_testing_agent": "Phase C backend + frontend fully green. Suites: test_phase_a.py (Phase A), test_phase_b.py (Boat Pro creds/tier + enriched authors), test_phase_c.py (standalone crew bank). All use subprocess mongosh against test_database with RUN_PREFIX teardown; run with `cd /app/backend && python -m pytest tests/test_phase_c.py -p no:randomly -q`. Frontend auth = session_token cookie on domain nw-sailing-community.preview.emergentagent.com. NOTE for UI tests: openForm() pre-selects the user's primary_market, so clicking sa-market-<primary_market> DESELECTS it — pick a different market instead. External requests need a browser User-Agent.",
+  "rca_of_the_issue": "No defects reproduced. One initial test failure ('Pick at least one market') was a test-script error: the standalone modal pre-selects the user's primary market and my click toggled it off. Corrected the script; app behavior is correct."
+}

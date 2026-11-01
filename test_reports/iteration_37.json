@@ -1,0 +1,58 @@
+{
+  "summary": "Iteration 37 / Phase Q full pass. Backend: 34/35 pytest green across new test_iter37_phase_q.py (19 tests: contact per-IP throttle, onboarding handle claim matrix, /boat-pros handle join, POST /messages/{tid}/read auth+marking+idempotency) plus a live two-socket WS test (test_iter37_ws_read.py) proving `message.read` is broadcast to BOTH participants, plus the repaired iter36 suite (15/15). Frontend: Onboarding handle input verified end-to-end (@ stripped client-side, persisted lowercase via /auth/me); Directory @handle links verified (pro-handle-<user_id> present on all 3 pros, click navigates to /u/<handle> only — stopPropagation holds); Messages receipts verified partially — single Check renders, and a WS message.read event correctly flips the bubble to the sky CheckCheck — BUT the Messages UI never issues POST /api/messages/<thread>/read when a thread is opened, so receipts never turn double in real usage. One genuine backend defect confirmed (403 on own thread for user_ids containing '-').",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "POST /api/messages/{thread_id}/read", "issue": "Participant check is `u['user_id'] not in thread_id.split('-')`, which rejects legitimate participants whose user_id contains a dash. Verified live: user 'TEST-iter37-dash-xxxx' in thread 'TEST-iter37-dash-xxxx-seed_marina' gets 403 Forbidden. Same flaw already exists in GET /api/messages/{thread_id}. Use dm_threads.participants (or a non-'-' separator) instead of string splitting. Regression test: TestReadReceipts::test_participant_check_breaks_for_dashed_user_ids (currently FAILING by design)."},
+      {"endpoint": "POST /api/contact", "issue": "The per-IP throttle is applied BEFORE payload validation, so 3 rejected (400) submissions lock a legitimate user out for 10 minutes. Verified: 3x400 then a valid payload -> 429. Recommend counting only successful submissions. Test: TestContactRateLimit::test_invalid_submissions_consume_quota (asserts current behaviour)."},
+      {"endpoint": "POST /api/contact", "issue": "_CONTACT_RATE is an unbounded in-process dict — it grows per unique IP forever (memory leak) and is not shared across workers/pods, so the effective limit is 3 x worker count. Prune expired keys or move to Mongo/Redis with a TTL."},
+      {"endpoint": "POST /api/messages/{thread_id}/read", "issue": "No unread counters anywhere: dm_threads/threads list is not updated and read_at is not surfaced in GET /messages/threads, so a thread list badge cannot be built on top of this without another query."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "Messages", "issue": "Handle link contrast: Directory @handle uses text-slate-400/300 at 11px on white (computed rgb(203,213,225) on #fff ~1.5:1) — effectively invisible and a WCAG AA failure. Bump to at least slate-500.", "selector": "[data-testid^=\"pro-handle-\"]", "priority": "MEDIUM"}
+    ],
+    "integration_issues": [
+      {"flow": "DM read receipts (mark-read on thread open)", "issue": "BROKEN/MISSING: Messages.jsx contains no call to POST /api/messages/<thread_id>/read. Verified with two authenticated browser contexts + network interception: the receiver opened the thread (?to=<sender>) and NO /read request was made; GET /messages/<tid> still showed read_at=null. Only after a manual POST /read did the sender's bubble flip (200 {ok:true, marked:1} -> WS message.read -> receipt-read-<id> rendered). So receipts can never turn double in real usage. Add the POST inside loadMessages()/thread-select (and re-run on WS 'message' arrival while the thread is open).", "affected_selectors": ["[data-testid=\"thread-<user_id>\"]", "[data-testid=\"receipt-sent-<id>\"]", "[data-testid=\"receipt-read-<id>\"]"]},
+      {"flow": "DM read receipts (own-side refresh)", "issue": "Even after the peer reads, the reader's own state is only patched in-memory via the WS handler; a page reload on the reader side is fine, but the SENDER relies solely on the WS event (no read_at refresh on reconnect/poll). If the sender's socket is down during the read event, the single Check stays forever until a reload.", "affected_selectors": ["[data-testid=\"receipt-<id>\"]"]}
+    ],
+    "design_issues": [
+      {"screen": "Directory cards", "issues": ["@handle link is an <a> nested inside the card <a> (invalid HTML; works only because React never re-parses the markup). Behaviour is correct today (stopPropagation verified) but consider moving the handle outside the card Link or converting the card to a div + onClick.", "@handle text contrast far below AA (see ui_bugs)."]},
+      {"screen": "Onboarding", "issues": ["No client-side validation/feedback on the handle input — an invalid handle (e.g. 'ab') only surfaces as a toast after submitting the whole form, and the rest of the onboarding data is not saved in that case (the 400 aborts the whole PATCH). Consider inline validation + an availability check."]},
+      {"screen": "Messages", "issues": ["Receipt icons render only on 'mine' bubbles as designed; single Check (slate-300) on the navy bubble reads fine, CheckCheck sky-300 is clear. No spacing issues found."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter37_phase_q.py",
+    "/app/backend/tests/test_iter37_ws_read.py",
+    "/app/backend/tests/seed_iter37_ui.py",
+    "/app/test_reports/pytest/iter37.xml"
+  ],
+  "action_items": [
+    "Messages.jsx: call POST /api/messages/<thread_id>/read when a thread is opened/selected and when a new inbound WS message arrives on the open thread — currently the whole read-receipt feature is dead on the client.",
+    "messaging_router: stop deriving participants from thread_id.split('-'); dashed user_ids (e.g. 'test-user-t1' which exists in this DB) get 403 on both GET /messages/{tid} and POST /messages/{tid}/read.",
+    "directory_router.contact_form: move the throttle check after validation (or only record successful submissions) and prune expired IP keys from _CONTACT_RATE.",
+    "Directory.jsx: raise @handle contrast (slate-500+) and avoid the nested <a> inside the card <a>."
+  ],
+  "critical_code_review_comments": [
+    "POST /api/contact signature changed to (body, request) — this silently broke the previously-green iter36 direct-call unit tests. I fixed those tests in-scope (unique X-Forwarded-For per request + a _FakeRequest stub) so the regression suite is green again; keep this in mind when changing router signatures.",
+    "The read filter {'read_at': None} correctly also matches pre-iter37 docs with no read_at key (verified by test_legacy_message_without_read_at_field_is_marked) — no migration needed.",
+    "handle uniqueness is still enforced only by an application-level find_one; two concurrent onboarding requests can claim the same handle. Add a unique (case-insensitive) index on users.handle.",
+    "mark_thread_read swallows all WS exceptions with a bare `except Exception: pass` — a broken socket registry would be invisible. Log at warning level.",
+    "GET /boat-pros does the handle join with one extra users.find over the pro user_ids — good (no N+1)."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter37_phase_q.py",
+    "/app/backend/tests/test_iter37_ws_read.py",
+    "/app/backend/tests/seed_iter37_ui.py",
+    "/app/backend/tests/test_iter36_phase_p.py"
+  ],
+  "success_rate": {"backend": "97% (34/35; the single failure is the dashed-user_id 403 defect)", "frontend": "75% (Onboarding handle OK, Directory mentions OK, contact form untouched, DM read receipts half-wired)"},
+  "seed_data_creation": "seed_iter37_ui.py minted TEST_iter37ui_new (onboarding_complete=false), TEST_iter37ui_sndr / TEST_iter37ui_rcvr (both with handles) plus one unread DM thread; all deleted afterwards (`python /app/backend/tests/seed_iter37_ui.py` to recreate, `... clean` to remove). All TEST_ contact_messages, dm_messages/threads and users created during the run were verified removed (0 leftovers).",
+  "should_call_test_agent_after_fix": true,
+  "should_main_agent_self_test": false,
+  "test_credentials": "No passwords (Emergent Google OAuth). Use /app/backend/tests/seed_iter37_ui.py, which prints NEW_TOKEN / SENDER_TOKEN / RECEIVER_TOKEN / THREAD_ID / MESSAGE_ID.",
+  "context_for_next_testing_agent": "Contact-form tests MUST send a unique X-Forwarded-For per request now (3/10min per IP, in-memory, resets on backend restart) — otherwise unrelated tests cascade into 429. Onboarding handle tests are order-dependent inside TestOnboardingHandle (test_valid_handle_persists_lowercase must run before test_duplicate_handle_409); run with -p no:randomly. Seed user_ids must NOT contain '-' or messaging endpoints return 403. WS: connect to wss://<host>/api/ws/<user_id>?token=<session_token>; message.read is delivered to both participants (verified). Frontend gap to re-verify after fix: the receiver page must issue POST /api/messages/<tid>/read on thread open.",
+  "rca_of_the_issue": "Read receipts: backend + WS + rendering are all correct, but the trigger is missing. Messages.jsx loadMessages() only does GET /messages/<tid>; there is no POST to /messages/<tid>/read anywhere in the frontend (grep confirms), so read_at stays null and every mine-bubble keeps the single Check. Repro: two sessions, sender DMs receiver, receiver opens /messages?to=<sender> -> no /read network call, GET history shows read_at:null. Manually POSTing /read returns marked:1 and the sender's bubble instantly switches to receipt-read-<id> via the WS message.read subscription, proving the only missing piece is the client call. Separately, the thread participant check splits thread_id on '-', which mis-parses user_ids that contain dashes (existing user 'test-user-t1'), producing 403 for the real participant."
+}

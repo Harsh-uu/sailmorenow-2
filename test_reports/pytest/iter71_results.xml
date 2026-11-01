@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="6" time="1.642" timestamp="2026-09-12T03:48:53.944704+00:00" hostname="agent-env-46b142a3-3003-4461-88a2-cfd75137d747"><testcase classname="tests.test_iter71_phase4.TestPartnersDirectory" name="test_list_partners_all_orgs_with_badges" time="0.232" /><testcase classname="tests.test_iter71_phase4.TestFoundingPartners" name="test_founding_partners_only_active" time="0.300" /><testcase classname="tests.test_iter71_phase4.TestPartnersDirectory" name="test_list_partners_market_filter" time="0.103" /><testcase classname="tests.test_iter71_phase4.TestRenewalContact" name="test_contact_renewal_subject_accepted" time="0.564" /><testcase classname="tests.test_iter71_phase4.TestFoundingCohortCap" name="test_global_and_seattle_caps" time="0.324" /><testcase classname="tests.test_iter71_phase4.TestSchedulerNightlyJob" name="test_nightly_job_runs_and_writes_dedupe_fields" time="0.364"><failure message="KeyError: 'MONGO_URL'">tests/test_iter71_phase4.py:173: in test_nightly_job_runs_and_writes_dedupe_fields
+    asyncio.run(_run())
+/usr/local/lib/python3.11/asyncio/runners.py:190: in run
+    return runner.run(main)
+           ^^^^^^^^^^^^^^^^
+/usr/local/lib/python3.11/asyncio/runners.py:118: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/local/lib/python3.11/asyncio/base_events.py:654: in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+tests/test_iter71_phase4.py:141: in _run
+    await _nightly_job(db)
+scheduler.py:109: in _nightly_job
+    from notifications import notify
+notifications.py:11: in &lt;module&gt;
+    from deps import db
+deps.py:15: in &lt;module&gt;
+    client = AsyncIOMotorClient(os.environ["MONGO_URL"])
+                                ^^^^^^^^^^^^^^^^^^^^^^^
+&lt;frozen os&gt;:679: in __getitem__
+    ???
+E   KeyError: 'MONGO_URL'</failure></testcase></testsuite></testsuites>

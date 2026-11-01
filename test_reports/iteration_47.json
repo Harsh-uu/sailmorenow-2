@@ -1,0 +1,53 @@
+{
+  "summary": "Iter47 (post-Phase-T follow-up) full backend+frontend verification. Backend pytest: /app/backend/tests/test_iter47_phase_u.py = 8/9 PASS (plus iter46 regression file 7/7 PASS = 15/16 overall). PASS: GET /api/payments/mode returns 200 {mode:'test', webhook_secret_configured:false}, is public (garbage bearer token still 200), and deps.stripe_mode() maps sk_live_/sk_test_/other -> live/test/unknown. PASS: contact-reply retry job matrix — (a) delivered:false + retry_count:0 -> send_email called, delivered flipped true with delivered_at + retry_count 1 + last_retry_at; (b) retry_count:5 -> skipped, no send, count stays 5; (c) delivered:true -> skipped; (e) reply with NO retry_count field (the real shape admin_router writes) -> retried and flipped, retry_count created =1. FAIL: the 'atomic $inc claim' does NOT prevent double-sends — two concurrent invocations via asyncio.gather on the SAME undelivered reply produced 2 send_email calls and retry_count=2. PASS: PATCH /api/boat-pros/photos rejects a 400,001-char photo with 400 'Each photo must be ≤400 KB' and accepts 400,000 chars ($set + verified in mongo, no _id leaked); /boat-pros/mine 401 unauth and returns the pro doc for a boat_pro session. PASS: POST /api/admin/contact/{id}/reply still returns {ok,persisted,delivered,reply}. Frontend: /pricing renders data-testid='stripe-mode-banner' ('Stripe test mode — no real charges…', amber-50/amber-200/amber-800) and data-testid='stripe-test-hint' positioned below data-testid='checkout-btn'; no stale hard-coded 'Test mode.' text in the subtitle paragraph (only 1 occurrence of 'Test mode' on the page = the hint); unauth checkout click correctly bounces to Emergent Google OAuth, and an authenticated POST /api/payments/checkout returns a live cs_test_ Stripe URL. Cap-ladder verified END TO END on real fixtures: 4000x3000 noisy PNG (35 MB) -> 373,403 chars @1600x1200, PATCH 200, thumbnail renders; 8000x6000 pure-noise PNG (144 MB) -> 381,447 chars @1600x1200, PATCH 200; a noise-preserving 4800x3600 fixture DID force the step-down and stored 338,219 chars @1200x900; /tmp/pure_noise_1600.png (the iter46 'uncompressible' case that used to toast ok:false) now fits at 337,998 chars thanks to the new rungs; non-image .txt -> toast \"isn't an image — skipped\" with ZERO PATCH. Regressions all green: /@captainjane renders HandleProfile (Captain Jane, @captainjane, recent posts), /notarealroute redirects to /, Onboarding shows 10 market chips + 7 reason chips + 3 handle-autofill chips (click fills handle-input and shows '@x is available ✓'), the 429 hint renders as data-testid='handle-availability-throttled' in amber-600 ('Too many checks — try again in a moment.') once /api/handle/available starts 429-ing (confirmed 429 after ~23 rapid calls), and AdminContact shadcn Select opens with 3 template options that populate the textarea.",
+  "backend_issues": {
+    "critical": [
+      {"endpoint": "scheduler._contact_reply_retry_job", "issue": "The 'atomic $inc claim' is not a claim. The filter {id, replies:{$elemMatch:{id, delivered:false}}} still matches after another worker has already incremented retry_count, so both runs get modified_count==1 and both send. asyncio.gather of two runs on ONE undelivered reply -> 2 send_email calls and retry_count=2. Overlapping/misfired cron runs (misfire_grace_time=1800) will duplicate customer emails and burn the 5-retry budget twice as fast.", "priority": "HIGH"}
+    ],
+    "minor": [
+      {"endpoint": "scheduler.next_run()", "issue": "next_run() only reports events_weekly_sync/expiring_nightly/sunday_digest — the new contact_reply_retry (and monday_admin_report_digest) jobs are invisible to any admin scheduler-status surface."},
+      {"endpoint": "scheduler._contact_reply_retry_job", "issue": "No per-reply backoff: every eligible reply is retried on every 3h tick regardless of last_retry_at, so a hard-failing address burns all 5 retries within 15h with no escalation/alert, and there is no counter/log of permanently-dead replies (retry_count==5)."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "ProPhotosUploader", "issue": "The initial GET /boat-pros/mine has no error state — on failure (e.g. 401 during session hand-off) it silently does setPhotos([]), and the very next upload PATCHes a 1-element array that WIPES the pro's existing gallery server-side. Reproduced: with the cookie applied late the uploader showed 0 slots while mongo had 3 photos, and the upload replaced all 3.", "selector": "[data-testid=\"pro-photos-uploader\"]", "priority": "MEDIUM"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "/pricing", "issues": ["data-testid='stripe-test-hint' uses text-slate-400 on white (~2.8:1) — below WCAG AA 4.5:1; use text-slate-500/600.", "The hint duplicates the amber banner almost verbatim ('Use card 4242 4242 4242 4242, any future date, any CVC.' appears twice on the same screen) — consider shortening the hint to 'Test mode — card 4242…' or dropping the banner's card copy."]},
+      {"screen": "Global (Profile / AdminContact)", "issues": ["Sonner toasts still render top-center and overlay the page heading — carried over from iter45/46, cosmetic."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter47_phase_u.py",
+    "/app/backend/tests/make_iter47_images.py",
+    "/app/backend/tests/cleanup_iter47.py",
+    "/app/test_reports/pytest/iter47_phase_u.xml"
+  ],
+  "action_items": [
+    "Make the retry claim a real CAS: include the observed retry_count in the $elemMatch (e.g. one-time normalisation $set replies.$[].retry_count=0, then filter {id: r.id, delivered:false, retry_count: rc} and $inc) — or claim on a last_retry_at cutoff. Current $inc-only filter allows concurrent double-sends (test_iter47_phase_u.py::TestContactReplyRetryJob).",
+    "Give ProPhotosUploader a load/error state: if GET /boat-pros/mine fails, disable the Add-photos input and surface an error instead of defaulting photos to [] (prevents wiping an existing gallery on the next PATCH).",
+    "Add contact_reply_retry + monday_admin_report_digest to scheduler.next_run().",
+    "Raise the /pricing stripe-test-hint contrast (text-slate-400 -> text-slate-500/600) and de-duplicate the 4242 copy between banner and hint."
+  ],
+  "critical_code_review_comments": [
+    "scheduler.py: the $inc-only 'claim' in _contact_reply_retry_job does not exclude an already-claimed reply — the guarding predicate must change with the write (CAS on retry_count or last_retry_at). Also worth logging retry_count==5 give-ups.",
+    "imageCompress.js: the cap ladder re-runs all 6 qualities at 1200 and 900 even when the source long edge is already <= 900, i.e. up to 18 identical toBlob encodes for a small uncompressible file. Skip a cap when Math.max(w,h) <= previous cap.",
+    "scheduler.py is 480 lines and mixes 5 unrelated cron jobs; consider splitting into scheduler/jobs/*.py before it crosses 700.",
+    "ProPhotosUploader.jsx doc comment is stale — it still says 'long-edge capped at 1600px', not the new [1600,1200,900] ladder."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter47_phase_u.py",
+    "/app/backend/tests/make_iter47_images.py",
+    "/app/backend/tests/cleanup_iter47.py",
+    "/app/test_reports/iteration_47.json"
+  ],
+  "success_rate": {"backend": "94% (15/16 pytest; 1 real defect)", "frontend": "100% of the requested flows rendered/worked; 1 medium robustness bug + 3 design nits"},
+  "seed_data_creation": "Minted temp sessions test_iter47_ui_pro (seed_marina boat_pro), test_iter47_ui_admin (jenn@sailmorenow.com), test_iter47_ui_onboard (new TEST_iter47_onboard user, onboarding_complete:false); in-test TEST_iter47_* admins + 5 TEST_iter47 contact_messages. ALL removed via `python tests/cleanup_iter47.py`, which also restored boat_pros.seed_marina.photos to the 2 original Unsplash URLs (verified) and deleted the TEST checkout payment_transaction. Image fixtures live only in /tmp (make_iter47_images.py regenerates).",
+  "should_call_test_agent_after_fix": true,
+  "should_main_agent_self_test": false,
+  "test_credentials": "Emergent Google OAuth — no passwords. Mint sessions via mongo per /app/auth_testing.md; seeded users listed in /app/memory/test_credentials.md.",
+  "context_for_next_testing_agent": "Run `cd /app/backend && python -m pytest tests/test_iter47_phase_u.py tests/test_iter46_polish_retest.py -v --tb=line` (~3s). The retry-job test seeds 5 replies (a/b/c/d/e) and does everything inside ONE asyncio.run (motor binds to the first loop); the only failing assertion is the concurrency CAS — after the fix, re-run and expect len(concurrent_calls)==1 and retry_count==1. Fixtures: `python tests/make_iter47_images.py` writes /tmp/big_noise_4000x3000.png and /tmp/huge_noise_8000x6000.png; the fixture that actually forces the 1200-px rung is a 1600x1200 noise array upscaled NEAREST to 4800x3600 (see report summary) — plain downscaled noise gets smoothed and fits at 1600. Toasts auto-dismiss in ~4s: poll [data-sonner-toast] every 500ms. Do NOT call page.context.clear_cookies() mid-run before goto — the auth cookie can miss the first render and /boat-pros/mine 401s, which both hides Onboarding chips and triggers the photo-wipe bug. Always finish with `python tests/cleanup_iter47.py`.",
+  "rca_of_the_issue": "Root cause of the retry double-send: an atomic claim requires the write to invalidate its own filter. `update_one({'id': msg.id, 'replies': {'$elemMatch': {'id': r.id, 'delivered': False}}}, {'$inc': {'replies.$.retry_count': 1}, '$set': {'replies.$.last_retry_at': now}})` mutates retry_count/last_retry_at but predicates only on delivered:false, which stays false until AFTER send_email returns. Two overlapping runs therefore both satisfy the filter, both get modified_count==1, and both send. Reproduction: seed one contact_messages doc with replies:[{delivered:false, retry_count:0}], patch mailer.send_email to an async fn that sleeps 250 ms and returns {'status':'ok'}, then `await asyncio.gather(_contact_reply_retry_job(db), _contact_reply_retry_job(db))` -> 2 sends, retry_count 2. Mitigation: compare-and-swap on the value just read (filter on retry_count == rc, after normalising the missing-field case) or claim on `last_retry_at` < now - lease."
+}

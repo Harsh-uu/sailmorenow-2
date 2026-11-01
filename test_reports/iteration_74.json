@@ -1,0 +1,38 @@
+{
+  "summary": "Iter 74 — Icon-system + toast parity verification across web + mobile + CI (frontend-only, backend untouched). All 4 tasks validated. (1) WEB Landing role selector: all four role pins (data-testid role-pin-sailor|boat_owner|boat_pro|partner) render with unified <Icon>. Clicking each pin swaps role-card-<key>. Verified specific lucide classes: sailor=svg.lucide-users×1, boat_owner=svg.lucide-sailboat×1, boat_pro=svg.lucide-handshake×1, partner uses custom Burgee SVG (no lucide class, svg count=12 in card). No blank/missing glyphs. (2) WEB Dashboard tiles (admin jenn@sailmorenow.com logged in via email+password): /dashboard shows 3 role-tailored cards for the Boat Owner branch — dash-card-find-a-boat-pro (lucide-handshake), dash-card-community-feed (lucide-compass), dash-card-events-calendar (lucide-calendar-days). All render via <Icon> wrapper (via cards.map with icon-name lookup). Zero pageerrors. (3) WEB sonner toast icons: submitted partner inquiry with empty required fields via partner-lets-chat-btn → partner-inquiry-submit → sonner toast fires with data-type=error, one svg icon (lucide alert-circle glyph — sonner's icons prop wires our <Icon name=error>), text 'Name and email are required.'. Toast appears top-center with richColors. NOTE: the svg class in-DOM is lucide-circle-alert (lucide v0.400+ renamed the class from `lucide-alert-circle`) — the icon renders correctly; only my class-name selector needed adjusting. Not a bug. (4) MOBILE (Expo web preview, viewport 390x844, auth via localStorage session_token as documented): RSVP toast — /events/[id] tap 'I'm going' → toast-success 'You're going!' with success icon; tap again → toast-info 'RSVP cancelled'. New-post toast — /new-post publish with empty title → toast-warning 'Add a title' with warning icon. Profile save toast — /profile → Edit handle → Save → toast-success 'Handle updated'. All three toast semantic types (success/info/warning) rendered with the correct <Icon> from the ToastContext's NAME map. (5) BUILD/CI: `node /app/scripts/gen-icon-docs.js --check` exits 0 on fresh docs/ICONS.md (37 icons), exits 1 with the helpful message 'docs/ICONS.md is stale. An <Icon> registry changed but ICONS.md was not regenerated.' when I intentionally truncated docs/ICONS.md. Pre-commit hook installed at /app/.git/hooks/pre-commit is executable and invokes the same script. Restored docs/ICONS.md after the drift test.",
+  "platforms_tested": ["web", "mobile"],
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "web": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+    "mobile": {
+      "ui_bugs": [],
+      "integration_issues": [],
+      "design_issues": [],
+      "react_native_issues": [
+        {"component": "Animated (RCTAnimation)", "issue": "Console warning on Expo web preview: 'Animated: useNativeDriver is not supported because the native animated module is missing. Falling back to JS-based animation.' This originates from ToastContext.tsx using useNativeDriver: true in Animated.timing. It is benign on web (falls back to JS) but is worth guarding with Platform.OS !== 'web' for cleaner logs. Reference: /app/mobile/src/context/ToastContext.tsx:47,57"},
+        {"component": "shadow* style props", "issue": "React Native Web deprecation warning: 'shadow* style props are deprecated. Use boxShadow.' Appears repeatedly on Expo web preview (multiple screens). Not blocking, but worth a codemod pass. Not part of this iteration's scope."},
+        {"component": "props.pointerEvents", "issue": "React Native Web deprecation warning: 'props.pointerEvents is deprecated. Use style.pointerEvents.' Triggered by Animated.View pointerEvents='box-none' in ToastContext.tsx:83. Move to style.pointerEvents. Reference: /app/mobile/src/context/ToastContext.tsx:83"}
+      ]
+    }
+  },
+  "parity_issues": [],
+  "test_report_links": [],
+  "action_items": [
+    "(Optional / non-blocking) Gate Animated.timing useNativeDriver by Platform.OS !== 'web' in /app/mobile/src/context/ToastContext.tsx (lines 47, 57) to silence the RCTAnimation warning on the web preview.",
+    "(Optional / non-blocking) Move pointerEvents='box-none' to the style object in ToastContext.tsx line 83 to satisfy the RN-Web deprecation.",
+    "(Optional / follow-up from iter73, still standing) Dashboard.jsx / MyEvents.jsx / Reviews.jsx still import icons directly from 'lucide-react' rather than through the unified <Icon> wrapper — the newly added Dashboard tiles DO go through <Icon>, but a few legacy sites don't. Consider a follow-up migration so the ESLint no-restricted-imports guard can be turned on strictly."
+  ],
+  "critical_code_review_comments": [
+    "Icon.jsx registry now includes the 4 semantic status icons (success/error/info/warning) mapped to lucide CheckCircle2/AlertCircle/Info/AlertTriangle. Wired into <Toaster icons={...} /> in App.js — clean single source of truth for status glyphs. Nice.",
+    "Landing.jsx role pins use <Icon name={p.icon} tone='current' /> so the icon color inherits from the button text color and correctly flips in the active/inactive + dark-mode variants without extra tone prop plumbing. Good.",
+    "gen-icon-docs.js --check produces a clear, actionable error and non-zero exit; the pre-commit hook is minimal and correctly rooted via `git rev-parse --show-toplevel`. Solid drift guard."
+  ],
+  "updated_files": [],
+  "success_rate": {"frontend": "web 6/6 checks pass (4 role pins + inquiry toast + dashboard tiles) ; mobile 4/4 checks pass (RSVP success, RSVP info, new-post warning, profile-save success) ; CI 2/2 (--check 0 and drift=1) — 12/12 assertions"},
+  "test_credentials": "Web: jenn@sailmorenow.com / [REDACTED] (email+password). Mobile: same account, session_token minted via /api/auth/login and seeded into localStorage per /app/memory/test_credentials.md.",
+  "seed_data_creation": "None — reused existing seeded events for RSVP test; handle save was idempotent (kept 'captain_jenn').",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "(a) sonner in this app is configured with richColors + icons override in App.js (lines 136-146). The rendered <svg> in the toast uses the lucide v0.400+ class naming — e.g. 'lucide-circle-alert' NOT 'lucide-alert-circle'. If you write assertions against a class name, either use the new name or (better) assert on the data-type attribute of [data-sonner-toast] and count svg children. (b) Mobile ToastContext uses testID `toast-<type>` so use `[data-testid=\"toast-success|error|info|warning\"]` on the Expo web preview. Toasts auto-hide after 3.2s so wait_for_timeout(1500-2000) then assert. (c) Auth on mobile web preview via localStorage key `session_token` = JSON.stringify(token). (d) Backend event ids for RSVP tests are prefixed `agg_owsa_*` — /api/events?market=all returns 21+ items. (e) Deprecated warnings 'shadow*' + 'props.pointerEvents' are RN-Web noise, not app bugs — worth cleaning later. (f) The pre-commit hook at /app/.git/hooks/pre-commit is installed and functional; if a future iteration changes either registry without regenerating docs/ICONS.md, the commit will fail with the expected message.",
+  "rca of the issue": "N/A — no bugs. Iteration ships the requested icon+toast parity work cleanly across both surfaces."
+}

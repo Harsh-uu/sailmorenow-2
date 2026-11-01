@@ -1,0 +1,89 @@
+{
+  "summary": "Phase H full backend + frontend test. Wrote /app/backend/tests/test_phase_h.py (27 tests, xdist-safe, RUN_PREFIX TEST_userH_) covering push endpoints, notify() push fanout (mocked push.webpush), 410 pruning, discussions (blog/forum + approval + cascade delete), digest send_history and _sunday_digest_job. Full regression: 315 passed / 13 skipped / 2 xfailed / 0 failed across all Phase A-H suites. VAPID key persistence verified across a backend restart (same 87-char key, no second 'generated fresh VAPID keypair' log line, exactly 1 db.settings doc). UI verified with Playwright: Community Hub (forum instant publish, blog pending hidden from non-admin, admin pending-drafts + Approve -> published), /digest recap card ('Recent sends' with dates) + browser-push subscribe/unsubscribe with mocked serviceWorker/Notification (GET /push/vapid-public-key + POST /push/subscribe + POST /push/unsubscribe all fired, push-off-btn/push-on-btn toggled), /admin/events filters (search/market/source + count line) and mobile 390px layout (no horizontal overflow). ONE CRITICAL functional bug found: the persisted VAPID private key is a PKCS8 PEM, which py_vapid/pywebpush cannot parse, so every REAL push delivery fails (sent always 0). Mocked tests hid this.",
+  "backend_issues": {
+    "critical": [
+      {
+        "endpoint": "push.send_push_to_user (POST /api/push/test, notify() fanout)",
+        "issue": "VAPID private key is stored/passed as a PKCS8 PEM ('private_pem'). pywebpush calls py_vapid.Vapid.from_string(), which strips newlines and b64url-decodes -> ValueError: 'Could not deserialize key data ... ASN.1 parsing error: invalid length'. Reproduced on the preview backend: POST /api/push/test with a real-format FCM endpoint returns {\"sent\":0} and logs '[push] unexpected error' with that traceback. Result: NO web push notification can ever be delivered in production. Verified fix direction (probe run locally): py_vapid accepts base64url raw 32-byte private value OR base64url DER, e.g. b64url(pk.private_numbers().private_value.to_bytes(32,'big')) — store that (or write the PEM to a file and pass the file path). New regression test TestVapidKeyFormat::test_stored_private_key_is_loadable_by_py_vapid currently FAILS and will pass once fixed; existing persisted db.settings {key:'vapid'} doc must be migrated/regenerated.",
+        "priority": "CRITICAL"
+      }
+    ],
+    "minor": [
+      {
+        "endpoint": "push.send_push_to_user",
+        "issue": "Non-WebPushException failures fall into the generic `except Exception` branch, so a permanently-broken key looks like a transient error and is only visible in logs; consider surfacing a health signal or failing loudly once at startup (e.g. validate the key with Vapid.from_string when generating/loading)."
+      },
+      {
+        "endpoint": "POST /api/push/subscribe",
+        "issue": "Body {} returns 422 (Pydantic) while {subscription:{keys:{}}} returns 400 — inconsistent but acceptable; documented in tests."
+      }
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {
+        "component": "public/sw.js",
+        "issue": "Service worker notification options reference icon:'/logo192.png' and badge:'/logo192.png', but /app/frontend/public contains only index.html and sw.js — the icon 404s, so pushed notifications will render without an icon/badge.",
+        "selector": "n/a (service worker)",
+        "priority": "MEDIUM"
+      },
+      {
+        "component": "dev server (CRA overlay)",
+        "issue": "On first visit the app was fully blocked by a stale 'Compiled with problems' overlay (eslint react-hooks/rules-of-hooks for DigestPreview.jsx line 55 — from a pre-fix version of the file). The overlay iframe #webpack-dev-server-client-overlay intercepted every click. Current source lints clean; `sudo supervisorctl restart frontend` cleared it. Main agent should restart the frontend after fixing hook-order/eslint errors so users aren't left on a blocking overlay.",
+        "selector": "#webpack-dev-server-client-overlay",
+        "priority": "MEDIUM"
+      },
+      {
+        "component": "AdminEvents filter-market",
+        "issue": "Cosmetic: the 'All markets (27)' option shows the total event count while the per-market options show none; the count line below already says '27 of 27 shown', so the number in the option label is redundant/confusing.",
+        "selector": "[data-testid='filter-market']",
+        "priority": "LOW"
+      },
+      {
+        "component": "CommunityHub.jsx",
+        "issue": "Unused imports/vars: `Link` and `useNavigate`/`nav` are imported but never used; eslint also flags an unnecessary eslint-disable directive on line 37.",
+        "selector": "n/a",
+        "priority": "LOW"
+      }
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {
+        "screen": "All pages (Header market select)",
+        "issues": ["React console warning on every page: 'In HTML, <span> cannot be a child of <option>. This will cause a hydration error.' Traced to the Header market <select>; pre-existing, non-blocking, but should be cleaned up."]
+      },
+      {
+        "screen": "/admin/events (390px)",
+        "issues": ["No issues — filters stack vertically, no horizontal overflow, cards/buttons wrap correctly."]
+      },
+      {
+        "screen": "/digest, /community-hub",
+        "issues": ["No contrast/spacing problems observed; recap + push cards align in a 2-col grid on desktop and stack on mobile."]
+      }
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_phase_h.py",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [
+    "CRITICAL: fix VAPID private key format in /app/backend/push.py — store base64url raw/DER private key (py_vapid.Vapid.from_string cannot parse PKCS8 PEM) and migrate/regenerate the existing db.settings {key:'vapid'} doc; then run TestVapidKeyFormat + POST /api/push/test with a real endpoint.",
+    "Add /logo192.png (and badge) to /app/frontend/public or drop the icon/badge fields from sw.js.",
+    "Restart frontend (supervisorctl restart frontend) after any eslint/hook fix — a stale CRA error overlay blocks all UI interaction.",
+    "Clean up unused Link/useNavigate imports + stale eslint-disable in CommunityHub.jsx; fix <span> inside <option> nesting warning in Header.jsx."
+  ],
+  "critical_code_review_comments": [
+    "push.py: never pass a PEM to pywebpush's vapid_private_key; it expects a b64url raw/DER string or a file path. Validate the key once at generation time (Vapid.from_string) so a bad format fails fast instead of silently swallowing every send.",
+    "push.py: pruning only triggers on WebPushException with response.status_code in (404,410); real pywebpush errors that surface as plain ValueError/requests errors go to the catch-all and are indistinguishable from transient failures.",
+    "notifications.notify(): the push fanout is awaited inline, so a slow/hanging push service will slow every notification-producing request — consider asyncio.create_task or a timeout.",
+    "hub_router.list_discussions: sorts on published_at, which is null for pending docs — ordering of the admin pending list is effectively undefined; sort on created_at for non-published statuses."
+  ],
+  "updated_files": ["/app/backend/tests/test_phase_h.py"],
+  "success_rate": {"backend": "96% (26/27 phase-H tests pass; 1 legitimate failure = VAPID key format bug. Full suite 315 passed/13 skipped/2 xfailed before adding that test)", "frontend": "100% of tested flows (hub create/approve, digest recap, push subscribe/unsubscribe, admin events filters, mobile layout)"},
+  "seed_data_creation": "Ephemeral TEST_userH_* users/sessions/discussions/push_subscriptions created and torn down by the pytest module fixture; two UI users (TEST_uiH_user/TEST_uiH_admin with digest_send_history seeded) were created for Playwright and have been deleted along with their discussions/subscriptions/notifications. seed crew.alex identity_verified preserved (verified true).",
+  "should_call_test_agent_after_fix": true,
+  "should_main_agent_self_test": false,
+  "test_credentials": "No passwords — Emergent Google OAuth. Mint mongo sessions per /app/auth_testing.md; admin via platform_role:'admin'.",
+  "context_for_next_testing_agent": "test_phase_h.py notes: (1) other suites bind deps.db to a loop they close via asyncio.run, so in-process tests must use the `inproc_db` fixture (fresh motor client on the module's persistent _LOOP, monkeypatched into push.db/notifications.db) and the _run() helper instead of asyncio.run; (2) pytest.ini pins -n 2 --dist loadscope, so the module-scoped cleanup fixture runs once PER WORKER — never delete by shared title regex, only by RUN_PREFIX-scoped ids (this caused a flaky cross-worker failure). Only remaining known failure is TestVapidKeyFormat (real bug). Playwright push testing requires page.context.grant_permissions(['notifications']) + an add_init_script mock of navigator.serviceWorker/pushManager (wrap in try/catch, since Notification.permission redefinition can throw).",
+  "rca_of_the_issue": "push._ensure_vapid_keys() serializes the generated EC key with serialization.PrivateFormat.PKCS8/Encoding.PEM and stores it as 'private_pem'; send_push_to_user passes that string as vapid_private_key. pywebpush >= 1.x forwards it to py_vapid.Vapid.from_string(), which does private_key.encode().replace(b'\\n', b'') then b64urldecode() — a PEM's '-----BEGIN PRIVATE KEY-----' header makes the decode produce garbage, raising ValueError('Could not deserialize key data ... ASN.1 parsing error: invalid length'). send_push_to_user catches it in its generic except, logs '[push] unexpected error' and returns 0, so the API still answers 200 {\"sent\":0} and no notification is ever delivered. Reproduction: insert a push_subscriptions doc with a real-format FCM endpoint for a user, POST /api/push/test with that user's token, then check backend.err.log. Probe (/tmp/vapid_probe.py) confirms py_vapid accepts b64url(raw 32-byte private value) and b64url(DER) but not PEM."
+}

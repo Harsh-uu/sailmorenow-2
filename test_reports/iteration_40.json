@@ -1,0 +1,49 @@
+{
+  "summary": "iter40 / Phase R testing of 4 features. Backend: 23/23 pytest tests PASS (unread counts on /messages/threads, /handle/available, /admin/contact incl. auth + limit clamping). Frontend: unread badge, badge-clears-after-open, /admin/contact (admin + non-admin gate), Header 'Contact queue' entry and Directory detail card all work. BLOCKER: /onboarding crashes with 'ReferenceError: HandleAvailability is not defined' — the HandleAvailability component is referenced at Onboarding.jsx:145 but never defined or imported anywhere in the repo, so the entire onboarding page white-screens (feature 3 frontend is not implemented).",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "Onboarding.jsx", "issue": "CRITICAL: <HandleAvailability handle={form.handle} /> at line 145 is undefined — no local definition and no import (grep across /app/frontend/src returns only this usage). Page throws 'ReferenceError: HandleAvailability is not defined' on render; the whole /onboarding route white-screens (verified live: handle-input count = 0, empty body, red overlay). This blocks ALL new-user signup, not just the availability badge. ESLint also flags it: react/jsx-no-undef.", "selector": "[data-testid=\"handle-input\"]", "priority": "CRITICAL"},
+      {"component": "Directory/ProCard", "issue": "Carry-over from iter39 (still unfixed): pro-handle <Link> nested inside the card <Link> -> invalid nested <a>, React hydration warning.", "selector": "[data-testid^=\"pro-handle-\"]", "priority": "MEDIUM"}
+    ],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "verified_working": [
+    "GET /api/messages/threads: unread==2 for recipient of 2 unread inbound; 0 for the sender side; 0 for a thread the caller sent all messages on; 0 after POST /messages/{tid}/read; 401 unauth; no _id leakage.",
+    "GET /api/handle/available: fresh -> {ok:true,reason:null,handle}; existing -> {ok:false,reason:'taken'}; case-insensitive ('TEST40Alpha' -> taken, handle lowercased); '@' prefix stripped; invalid for '', 'ab', 21 chars, spaces, '-', '!', '@', and missing q; boundary 3 and 20 chars accepted.",
+    "GET /api/admin/contact: 401 unauth, 403 non-admin, 200 admin with {count,total,messages}; sorted DESC by created_at; count==len(messages); limit=1 honoured, limit=0 clamped to 1, limit=100000 clamped to <=500; no _id.",
+    "Frontend Messages: orange 'unread-<user_id>' badge showed '2'; after clicking the conversation the badge disappeared (POST /read + loadThreads refresh).",
+    "Frontend /admin/contact: admin-contact-page rendered with 7 contact-msg-<id> cards, header counts, mailto reply links; non-admin sees 'Admin access required.'; Header admin dropdown contains 'Contact queue'.",
+    "DirectoryDetail (feature 2): pro-detail-page renders hero photo, tier badge, rating, categories, email/phone/website, Reviews list and dm-btn without console errors."
+  ],
+  "test_report_links": [
+    "/app/backend/tests/test_iter40_phase_r.py",
+    "/app/backend/tests/seed_iter40_ui.py",
+    "/app/test_reports/pytest/iter40_phase_r.xml"
+  ],
+  "action_items": [
+    "CRITICAL: implement/import the HandleAvailability component in Onboarding.jsx (debounced GET /api/handle/available, rendering data-testid 'handle-availability-{invalid|checking|available|taken}'). Onboarding is completely broken until then.",
+    "Run `eslint src/pages` before shipping — this defect was caught by react/jsx-no-undef.",
+    "Optional: seed at least one boat_pro with certifications/licenses/insurance and one mutual_reviews pair so pro-credentials and mutual-scorecard sections are exercisable (both currently never render — collections are empty, code paths are conditional and untested)."
+  ],
+  "critical_code_review_comments": [
+    "admin_router.py is ~435 lines and mixes digest, search, saved searches, handle availability and admin analytics/contact — /handle/available and /admin/contact are unrelated to 'digest' per the module docstring; consider splitting.",
+    "list_threads issues one count_documents per thread (N+1) — fine at 100 threads, but a single $group aggregation over dm_messages would scale better.",
+    "GET /api/handle/available is public and unthrottled; it is a user-enumeration oracle (confirms whether a handle exists). Consider a light rate limit."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter40_phase_r.py",
+    "/app/backend/tests/seed_iter40_ui.py"
+  ],
+  "success_rate": {"backend": "100% (23/23)", "frontend": "83% (5/6 checks; Onboarding handle availability fails hard)"},
+  "seed_data_creation": "Created users test-iter40-a/-b/-admin (admin via platform_role) with sessions test_sess_iter40_a/b/admin, a dm_thread with 2 unread inbound msgs, a send-only thread, and 2 TEST_iter40 contact_messages. ALL seeded data deleted after testing (verified deleteMany counts).",
+  "should_call_test_agent_after_fix": true,
+  "should_main_agent_self_test": false,
+  "test_credentials": "Emergent Google OAuth; mint Mongo sessions per /app/auth_testing.md. Re-run /app/backend/tests/seed_iter40_ui.py to recreate iter40 fixtures.",
+  "context_for_next_testing_agent": "Re-seed with `python /app/backend/tests/seed_iter40_ui.py` before running test_iter40_phase_r.py (the mark-read test consumes the unread state; re-seed again before browser tests). Backend Phase R is fully green — the only open item is the missing HandleAvailability component in Onboarding.jsx; after the fix, verify handle-availability-{checking,available,taken,invalid} testIds with ~250ms debounce and re-check that /onboarding renders at all. Directory pro-credentials + mutual-scorecard testIds are data-gated and were not renderable (no boat_pro has credentials; mutual_reviews is empty).",
+  "rca_of_the_issue": "Onboarding.jsx line 145 was added to render the availability badge but the HandleAvailability subcomponent itself was never added to the file (nor to a shared component and imported). React evaluates the identifier at render time -> ReferenceError, error boundary/CRA overlay replaces the page. Reproduce: open /onboarding (or run eslint on the file)."
+}

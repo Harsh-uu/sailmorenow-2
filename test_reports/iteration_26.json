@@ -1,0 +1,36 @@
+{
+  "summary": "Iteration 26 — targeted retest of the 7 iteration_25 fixes (no full-suite rerun). ALL 7 VERIFIED FIXED. Backend: new /app/backend/tests/test_iter26.py = 11/11 passed. (1) `/api/admin/analytics` is registered again — present in the OpenAPI document with a `get` op; GET as admin returns 200 with users/posts/events keys and no `_id`; 401 unauth / 403 non-admin gates hold. (2) send-now OpenAPI description no longer contains 'bypass' and now reads 'still honouring the same 6-day dedupe window as the cron'; dry_run default true returns {dry_run,would_send,markets_considered,as_of}. (3) Mentions: `@Al` (2 chars) resolves nobody — no mentioned_user_ids and 0 notifications for a matching 'Alqa...' user; `@Alexqa` resolves the target and creates exactly 1 mention notification; with 7 seeded users named 'Broadxx User0..6', `@Broadxx` resolved <=5 users and produced <=5 notifications (per-token .limit(5) confirmed). (4) reports insights: inserted N reports on one post with reasons R1 (older) then R2 (newest) — top_targets[0].last_reason == 'R2 most recent reason', so the {$sort:{created_at:1}} before $group is effective; weekly is always exactly 8 ascending buckets; empty-state verified against an isolated (renamed-away) reports collection: 8 zero buckets, top_targets [], open_total 0 — collection restored afterwards. Frontend (public preview URL, admin/author sessions minted via seed_iter25_ui.py): (5) AdminReports weekly chart bars are now PROPORTIONAL — counts [0,0,1,0,3,0,2,4] rendered at [2,2,24,2,72,2,48,78.5]px, tallest bar > every smaller-count bar, 5 distinct heights (was all ~4px in iter25); empty state data-testid='reports-weekly-empty' ('No reports in the last 8 weeks.') renders and the chart node is absent when all 8 counts are 0. (6) AdminAnalytics Send now is disabled with visible disabled styling before a dry-run (bg rgb(226,232,240)/text rgb(148,163,184)/cursor not-allowed, classes bg-slate-200 text-slate-400) and becomes enabled + orange rgb(242,160,59) after a successful dry-run ('0 users would receive a digest right now (2 markets considered).'); card copy now says 'using the same 6-day dedupe as the Sunday cron' — no 'bypasses'. (7) PostComments renders '@Alexqa' as data-testid='mention-token' in text-sky-600 rgb(2,132,199), and '@Al' in the same comment stays plain text (exactly 1 token in the thread). All TEST_iter25ui_/TEST_iter26_ seed data cleaned up (verified 0 leftovers).",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "GET /api/admin/reports", "issue": "Pre-existing (unchanged from iter25, not part of this retest scope): weekly buckets are 'now'-relative rather than calendar-week aligned, and insights still cost 8 count_documents + 1 aggregate + up to 5 lookups per queue load."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "AdminReports weekly chart", "issues": ["LOW: bar heights are proportional but slightly compressed at the top. The percentage now resolves against the whole h-full column, which also contains the date label (~17px), so the max-count bar is clipped by flex to 78.5px while a count of 3 renders at 72px — 4 vs 3 look almost identical. Optional polish: wrap the bar in its own flex-1 min-h-0 track so 100% == the track height, not the column height."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter26.py",
+    "/app/test_reports/pytest/iter26.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "test_iter26.py::TestAnalyticsRoute::test_openapi_registers_admin_analytics is now the route-registration smoke test iter25 asked for — keep it in the suite so a deleted decorator fails CI. Note it reads http://localhost:8001/openapi.json because the ingress only forwards /api/*, so the OpenAPI doc is not reachable on the public URL (behaviour assertions all use the public URL).",
+    "reports_router insights empty-state is only structural: with 0 reports the API correctly returns 8 zero buckets, but the response still executes 8 separate count_documents — a single $facet would make the common empty/low-volume case one round trip.",
+    "AdminReports.jsx chart is still an inline IIFE in JSX; extracting <WeeklyChart/> would also make the bar-track height fix (see design_issues) trivial."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter26.py (new)"
+  ],
+  "success_rate": {"backend": "100% (11/11 iter26 spot-checks)", "frontend": "100% (3/3 fixed UI behaviours verified)"},
+  "seed_data_creation": "Reused `python /app/backend/tests/seed_iter25_ui.py` for admin/author/Alexqa sessions + a post + reports across 4 week buckets; test_iter26.py mints its own TEST_iter26main_ users/posts/reports. All removed — verified 0 remaining users/reports/notifications/comments matching TEST_iter2[56].",
+  "should_call_test_agent_after_fix": false,
+  "should_main_agent_self_test": true,
+  "test_credentials": "No passwords (Emergent Google OAuth). Sessions minted in mongo: `python /app/backend/tests/seed_iter25_ui.py`, `CLEANUP=1 python ...` to remove.",
+  "context_for_next_testing_agent": "All iter25 findings are closed; nothing outstanding from Phase K. Reusable notes: (a) OpenAPI is NOT exposed via the public URL — use http://localhost:8001/openapi.json for route-registration checks only. (b) POST /api/reports is idempotent per (reporter,target,status=open), so multi-report ordering tests must insert directly via mongosh with explicit created_at. (c) top_targets is limited to 5 by count, so to assert on your own target insert (current max count + 2) reports. (d) The reports empty state can be tested by renaming the reports collection away and back (see test_empty_state_shape_when_no_reports) or by page.route interception on **/api/admin/reports*. (e) PostComments testids are `toggle-comments-<postId>` / `comment-input-<postId>` (there is no `comments-toggle` prefix). (f) Full suite was NOT rerun this iteration; iter25 reported 417/423 with 6 pre-existing WS-concurrency / push-VAPID / webhook-secret env failures.",
+  "rca_of_the_issue": "N/A — retest only. Confirmed root causes from iter25 are addressed at source: reports_router adds {$sort:{created_at:1}} ahead of the $group (so $last is the newest doc), community_router's mention regex is @([A-Za-z][A-Za-z0-9_'.-]{2,40}) (>=3 chars) with a per-token .limit(5) and tokens[:10], admin_router re-declares @router.get('/admin/analytics') and drops the 'bypasses' wording, AdminReports gives the bar column h-full + justify-end so the percentage height has a definite containing block, AdminAnalytics conditionally applies bg-slate-200/text-slate-400 while disabled, and PostComments uses text-sky-600 with the 3-40 char token regex."
+}

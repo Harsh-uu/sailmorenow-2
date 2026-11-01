@@ -1,0 +1,39 @@
+{
+  "summary": "RETEST after CORS fix — verified WITHOUT the route-proxy bypass. The Expo web preview now successfully makes live authenticated /api/* calls from a real browser at https://boat-community.expo.preview.emergentagent.com. Backend (see new cors_middleware in /app/backend/server.py) returns Access-Control-Allow-Origin: * for Bearer-only requests (no session cookie) and echoes Origin+credentials when a session cookie is present. Confirmed via curl (OPTIONS -> ACAO:*, GET /api/auth/me -> 200 ACAO:*) AND via a real Chromium session seeded with a fresh Bearer token in localStorage. Observed 0 failed /api calls. All requested mobile flows re-verified end-to-end: Feed shows 6 post-card-* + notifications-btn + new-post-fab; Events shows 21 event-card-* + 11 market-chip-* (incl market-chip-all); Directory (labelled 'Boat Pros') shows 4 pro-card-* + directory-search-input; Messages shows the 2 seeded threads and chat send worked ('RETEST cors ok' text appears in the thread after chat-send-btn — WebSocket path works); Profile renders with manage-pro-btn/newsletter-switch/logout-button; Pricing shows the Test mode banner and 9 subscribe-* buttons. Pro review submission on /directory/seed_rigging still POSTs /api/reviews successfully (200) but shows NO visible success confirmation — 'Review posted' alert is still not shown (unfixed from iteration_55). Bundle compiles; only benign RN-Web 'shadow*' deprecation warnings in the console. The primary CORS blocker from iteration_55 is RESOLVED.",
+  "platforms_tested": ["mobile"],
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "mobile": {
+      "ui_bugs": [
+        {"component": "Pro detail review form", "issue": "After tapping star-3 then submit-review-btn on /directory/[id], /api/reviews returns 200 but there is no visible success feedback — no alert, no toast, no inline text (the requested 'Review posted' confirmation is missing). Verified 'Review posted' is NOT in document.body.innerText post-submit.", "testID": "submit-review-btn", "priority": "MEDIUM"},
+        {"component": "(tabs) tab bar", "issue": "Tab-bar buttons at the bottom of the screen (Feed / Events / Boat Pros / Messages / Profile) do NOT expose testIDs — [data-testid=\"feed-tab\"], [data-testid=\"events-tab\"], [data-testid=\"directory-tab\"], [data-testid=\"messages-tab\"], [data-testid=\"profile-tab\"] all returned no matches. Navigation still works via Expo Router URLs, but automated tap-testing of the tab bar itself is blocked. (Iteration_55's report referenced these testIDs — they appear never to have been added to the actual Tabs.Screen options.)", "testID": "feed-tab | events-tab | directory-tab | messages-tab | profile-tab", "priority": "MEDIUM"}
+      ],
+      "integration_issues": [],
+      "design_issues": [],
+      "react_native_issues": [
+        {"component": "shadow* style props (RN-Web)", "issue": "React-Native-Web deprecation warning still emitted repeatedly: '\"shadow*\" style props are deprecated. Use \"boxShadow\".' Non-blocking. Likely from /app/mobile/src/components/ui/* (Card/Button). Migrate shadowColor/shadowOffset/shadowOpacity/shadowRadius to a single boxShadow style."}
+      ]
+    }
+  },
+  "parity_issues": [],
+  "test_report_links": ["/tmp/00_feed_real.png", "/tmp/01_events_real.png", "/tmp/02_directory_real.png", "/tmp/03_messages_real.png", "/tmp/04_profile_real.png", "/tmp/05_pricing_real.png", "/tmp/06_review_submit.png", "/tmp/nav_events.png", "/tmp/nav_directory.png", "/tmp/nav_messages.png", "/tmp/nav_profile.png"],
+  "action_items": [
+    "PRO REVIEW CONFIRMATION: Show a visible success confirmation on /directory/[id] after submit-review-btn — either an Alert.alert('Review posted') or an inline success banner. The API call already succeeds; only the UX feedback is missing.",
+    "TAB BAR testIDs: Add testID=\"feed-tab\" / \"events-tab\" / \"directory-tab\" / \"messages-tab\" / \"profile-tab\" to the corresponding Tabs.Screen tabBarButton (or wrap in a Pressable with the testID) in /app/mobile/app/(tabs)/_layout.tsx. Prior test reports assumed these existed.",
+    "shadow* → boxShadow migration in mobile/src/components/ui/*.",
+    "Optional: rename tab label 'Boat Pros' to 'Directory' (or update all references), for consistency with the /directory route and directory-* testIDs."
+  ],
+  "critical_code_review_comments": [
+    "backend/server.py cors_middleware is a clean and correct fix for the browser/Bearer scenario: wildcard ACAO when no session cookie, credentialed origin-echo when a cookie is present. Verified with curl and a real browser. Nice.",
+    "One minor nit in cors_middleware: 'access-control-request-method' presence check is only used for preflight detection; it's fine, but conventionally you can also fast-return for OPTIONS regardless of that header to short-circuit even simpler probes.",
+    "mobile AuthContext still silently falls through to null user if /auth/me ever fails — with CORS fixed this is far less likely, but a small 'Can't reach server' banner would still make future infra faults easier to diagnose."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "n/a (skipped per request)", "frontend": "100% in real browser at expo.preview origin — 0 failed /api calls; 1 pre-existing UX gap (silent review submit) + 1 missing-testID issue on tab bar"},
+  "test_credentials": "Bearer token 'test_session_mobile_1788975595586' minted in test_database.user_sessions for user_id seed_marina (pro.marina@sailmorenow.dev, Premium Boat Pro). Seeded via `localStorage.session_token = JSON.stringify(<token>)` before navigation. No route-proxy bypass used.",
+  "seed_data_creation": "Inserted 1 user_sessions row. Posted 1 chat message ('RETEST cors ok') into the Jenn McDonald thread and 1 review row on seed_rigging (3 stars, no body) during retest. Cleanup not performed.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "CORS issue from iteration_55 is FULLY RESOLVED — the mobile Expo web preview now works end-to-end in a real browser with just `localStorage.session_token = JSON.stringify('<token>')` seeded before navigation; NO Playwright route.fetch proxy is needed. Two remaining minor items for next iteration if desired: (1) silent review submission on /directory/[id] — no 'Review posted' alert/toast; (2) missing tab-bar testIDs on /app/mobile/app/(tabs)/_layout.tsx (feed-tab, events-tab, directory-tab, messages-tab, profile-tab do not exist — navigation still works via URLs). All other flows (Feed, Events, Directory, Messages+WS, Profile, Pricing) fully functional.",
+  "rca of the issue": "Previous CORS block (iteration_55) is fixed by the new middleware in /app/backend/server.py (lines ~59-78): when the incoming request lacks a `session_token=` cookie (i.e. the mobile Bearer path), the response now sets `Access-Control-Allow-Origin: *` unconditionally, sidestepping the edge Origin-rewrite problem entirely because there is no origin echo happening. When the request DOES carry a session cookie (web), the middleware echoes Origin + Access-Control-Allow-Credentials:true. Verified: `curl -X OPTIONS -H 'Origin: https://boat-community.expo.preview.emergentagent.com' https://owsa-events-preview--7evdsk8f.preview.emergentagent.com/api/auth/me -D-` -> `HTTP/2 204` + `access-control-allow-origin: *`. Real-browser network log shows every /api/* response carrying ACAO:* and zero CORS errors."
+}

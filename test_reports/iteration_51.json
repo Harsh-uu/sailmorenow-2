@@ -1,0 +1,49 @@
+{
+  "summary": "Iter51 targeted test of the new events/category work. BACKEND: new pytest suite /app/backend/tests/test_iter51_events_category.py = 21/21 PASS. GET /api/events -> every event has a valid category + category_needs_review; ?category=racing|cruising|volunteering|other|education filter exactly matches the unfiltered set per category; unknown category value is ignored (no 400, returns all); ?market=Greater Seattle filters, market=all returns all. POST /api/events (partner.psss session): category='education' stored with category_manual=true/needs_review=false; auto-detect works ('Spinnaker clinic'->education, is_race:true->racing, no-keyword title->other+needs_review=true, invalid category value falls back to auto ('Frostbite regatta'->racing)). PATCH /api/admin/events/{id}/category (admin jenn@sailmorenow.com): 200 with category_manual=true/needs_review=false, reflected in GET /api/admin/events, GET /api/events and ?category= filter; invalid category -> 400; partner session -> 403; unauthenticated -> 401/403; unknown event id -> 404. GET /api/discussions?kind=forum returns 5 forum threads, no _id leakage anywhere. FRONTEND: /events desktop fully works - event-calendar renders, scope-toggle (My market 'Greater Seattle' 2 rows -> All PNW 21 rows), all 6 cat-* chips, day-with-dots click filters list and events-count shows 'X event on September 5, 2026', show-all-upcoming resets to 21, cat-racing shows 5 rows all tagged RACING each with crewbank-btn, learn-more-<id> opens event-detail-modal with description and closes via Escape / X / backdrop (list still intact), racing modal has modal-crewbank-btn. Landing '/': live-now-widget visible and not clipped at 390 (max child right 374 of 390), forum-preview renders 5 threads, footer-logo img alt='Sail More Now', footer text contains 'PNW sailing', 0px gap between CTA band and footer, no horizontal overflow at 1920. /admin/events (admin cookie session): filter-needs-review narrows 21 -> 6 flagged events, category-select-<id> change shows toast 'Category set to Cruising / Social', persists after reload and clears the needs-review badge. TWO REAL LAYOUT DEFECTS FOUND: /events horizontally overflows at 390px (calendar card 557px wide -> Fri/Sat columns clipped off-screen) and at 1024px (right column min-content 681px -> 'Learn more' buttons clipped, doc scrollWidth 1097 vs 1024). 768px is fine.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "GET /api/events?category=bogus", "issue": "Invalid category value is silently ignored and the full list is returned instead of 422/400. Acceptable but undocumented; FE never sends it."},
+      {"endpoint": "categorize.py rule priority", "issue": "Volunteering rules outrank cruising, so 'Anacortes Cruisers' Rendezvous' (description mentions a work/race-committee keyword) surfaces as Volunteering with needs_review=true. Correct by design (flagged), but the displayed guess is the lower-confidence one; consider longest/most-hits wins for ambiguous events."},
+      {"endpoint": "aggregator data quality", "issue": "4 upcoming OWSA-sourced events are titled literally 'Book online' -> categorized 'other' + needs_review. Not a categorizer bug, but they render as junk rows on /events."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "Events.jsx layout grid (mobile)", "issue": "MOBILE HORIZONTAL OVERFLOW at 390px: the calendar's grid column resolves to 557px (computed grid-template-columns: 557px) while the grid content box is 358px, so document.scrollWidth=573 vs viewport 390 and the FR/SA calendar columns are clipped off-screen. The calendar itself fits its card (scrollWidth 555 <= 557) - the card is what overflows. Forcing the grid child to 358px renders the whole month correctly, so it is purely auto-column sizing: the container 'mt-6 grid lg:grid-cols-[360px_1fr]' has no base grid-cols-1 / minmax(0,1fr), so the single implicit column takes the calendar's max/min-content width. Note min-width:0 on the child alone does NOT fix it.", "selector": "[data-testid=\"events-page\"] .grid.lg\\:grid-cols-\\[360px_1fr\\]", "priority": "HIGH"},
+      {"component": "Events.jsx layout grid + EventRow.jsx (1024px)", "issue": "OVERFLOW AT lg BREAKPOINT: at exactly 1024px the columns compute to '360px 681.4px' inside a 960px container -> document.scrollWidth 1097, and every row's 'Learn more' button (and CREW BANK) is pushed off-screen (learn-more-<id> right edge > viewport). Right track needs minmax(0,1fr) and the EventRow text block needs min-w-0 so the row can shrink below its 679px min-content. 768px and 1920px are fine.", "selector": "[data-testid^=\"learn-more-\"]", "priority": "HIGH"},
+      {"component": "EventDetailModal (mobile 390)", "issue": "Modal renders as a full-height 390x844 sheet with ~450px of empty space below the content, and the title is truncated with an ellipsis ('Saturday Afternoon Sailing - S…') instead of wrapping to two lines.", "selector": "[data-testid=\"event-detail-modal\"]", "priority": "LOW"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "/events list rows", "issues": ["All-day imported events show a timed value derived from UTC ('Saturday Afternoon Sailing' at 11:00 PM -> 3:00 AM in a UTC browser). Rendering is local-time based, so PT users see 4 PM; only flagging in case feed times should be pinned to America/Los_Angeles.", "4 rows titled 'Book online' (OWSA feed) look like scraping noise in the condensed list."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter51_events_category.py",
+    "/app/backend/tests/seed_iter51_ui.py",
+    "/app/test_reports/pytest/iter51_results.xml"
+  ],
+  "action_items": [
+    "Events.jsx: add a base grid-cols-1 and use lg:grid-cols-[360px_minmax(0,1fr)] on the calendar/list grid - fixes the 390px calendar overflow AND the 1024px 'Learn more' clipping.",
+    "EventRow.jsx: add min-w-0 (and truncate/flex-wrap on the title/meta block) so a row can shrink below its 679px min-content width.",
+    "Optional: wrap the event title in EventDetailModal on mobile instead of truncating, and tighten the full-height mobile sheet.",
+    "Optional: consider hits-count/priority tie-break in categorize.py for ambiguous events (Rendezvous -> Volunteering case), and filter/clean 'Book online' titles in the OWSA aggregator."
+  ],
+  "critical_code_review_comments": [
+    "list_events applies apply_category() at read time only when the stored doc has no category, but the ?category= filter is a pure Mongo query on the stored field - any legacy/aggregated doc missing `category` is invisible to category filters while still appearing in the unfiltered list. Currently 0 docs are missing it (aggregator writes it), but a backfill/migration or filtering on the computed value would make this robust.",
+    "create_event pops an invalid `category` and falls back to auto-detect silently; returning 400 for an unknown category would surface client bugs instead of hiding them.",
+    "The mobile-overflow class of bug (missing min-w-0 / minmax(0,1fr) on grid children) has now been reported in iter50 (Directory pro-card) and again here - worth a one-time audit of every `grid ... lg:grid-cols-[..]` container."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter51_events_category.py",
+    "/app/backend/tests/seed_iter51_ui.py"
+  ],
+  "success_rate": {"backend": "100% (21/21)", "frontend": "88% - all functional events/category/landing/admin requirements pass; 2 HIGH layout overflow defects at 390px and 1024px"},
+  "seed_data_creation": "seed_iter51_ui.py minted session_token=test_iter51_admin_token for jenn@sailmorenow.com (admin, existing user user_4b6b1bb144d4) and test_iter51_partner_token for partner.psss@sailmorenow.dev (seed_partner). All TEST_-prefixed events created by pytest were deleted in teardown (0 left). The one admin category override applied during UI testing (agg_owsa_99168559cc043071) was reverted to category='other', category_needs_review=true, category_manual unset. No existing events deleted.",
+  "should_call_test_agent_after_fix": false,
+  "should_main_agent_self_test": true,
+  "test_credentials": "Cookie/Bearer session_token=test_iter51_admin_token (admin jenn@sailmorenow.com) and test_iter51_partner_token (partner.psss@sailmorenow.dev), valid 2 days; re-mint with `python /app/backend/tests/seed_iter51_ui.py`. Cookie domain nw-sailing-community.preview.emergentagent.com, secure, sameSite=None.",
+  "context_for_next_testing_agent": "Backend regression for events categories: `pytest tests/test_iter51_events_category.py` (needs the two tokens from seed_iter51_ui.py; pytest.ini already runs xdist loadscope). Current data: 26 events total, 21 upcoming, 6 needing category review, only 2 upcoming in Greater Seattle (so 'My market' scope legitimately shows 2 rows). Forum has exactly 5 threads. /events overflow status by width: 390 FAIL, 768 PASS, 1024 FAIL, 1920 PASS - re-check exactly those widths after the grid fix.",
+  "rca_of_the_issue": "Both overflow defects come from the same container in Events.jsx: `<div className=\"mt-6 grid lg:grid-cols-[360px_1fr] gap-6 items-start\">`. (a) Below lg there is no explicit grid-cols-1, so the single implicit auto column is sized from the calendar subtree's content width (557px measured via getComputedStyle grid-template-columns) rather than the 358px available, pushing document.scrollWidth to 573 at vw=390 and clipping the Fr/Sa day columns; setting the child width to 358px renders the month perfectly, proving it is column sizing and not the react-day-picker internals (table min-width is 0). (b) At lg the second track is `1fr`, which floors at the content's min-content (681px) because EventRow's text block lacks min-w-0; 360+24+681 = 1065 > 960 content box, so at vw=1024 the page scrolls horizontally and the shrink-0 action column (CREW BANK / Learn more) sits outside the viewport."
+}

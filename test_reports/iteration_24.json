@@ -1,0 +1,44 @@
+{
+  "summary": "Iteration 24 e2e test of 4 new features (Report Abuse, multi-market digest, threaded replies, admin analytics). Backend: 33 pytest cases in /app/backend/tests/test_iter24.py covering POST /api/reports (401/400/400/404/200/duplicate), GET /api/admin/reports (401/403/200, all 4 status filters, hydrated + null target), PATCH /api/admin/reports/{id} (403/400/404, dismiss, resolve, resolve+delete for post/comment/discussion, duplicate auto-resolve), GET /api/admin/analytics (403 non-admin, full shape, live counters), GET /api/digest/preview?market=all (401, multi-market payload, 400 without markets), mailer.community_digest_email_html single/multi header + per-market sections, and scheduler._sunday_digest_job with monkeypatched send_email (one email for markets=[A,B], subject contains market, idempotent on second run). 32/33 passed — only deviation: /api/admin/analytics returns 403 instead of 401 when unauthenticated. Frontend: verified flag button on other users' posts (hidden on own), flag modal + reason/details + success toast, per-comment flag buttons, 3-level thread rendering with progressive indentation and a new depth-4 reply posting successfully, discussion flag button on /community-hub/<id>, /admin/reports queue (heading, 4 tab pills, dismiss/resolve/remove all work and refresh the list; DB verified: target comment deleted, report marked resolved+target_deleted), /admin/analytics (all 8 stat cards + 5 breakdown tables render live data), and non-admin gate text on both admin pages.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "GET /api/admin/analytics", "issue": "Returns 403 'Admin only' for unauthenticated callers; spec/convention (require_admin used by /api/admin/reports) returns 401 when no session. Use require_admin for consistency."},
+      {"endpoint": "GET /api/admin/reports", "issue": "Dead handler param `admin: Dict[str, Any] = None` left in the signature (comment says 'kept for parity'). Harmless today but it is an unused non-Pydantic param in a GET signature — remove it."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Navbar / admin discoverability", "issues": ["No nav or admin-menu link anywhere to /admin/reports or /admin/analytics — admins must type the URL. Only App.js routes reference them."]},
+      {"screen": "Admin gating (AdminReports/AdminAnalytics)", "issues": ["Client gate checks only user.platform_role === 'admin', so an admin authorized via ADMIN_EMAILS env (backend is_admin) sees 'Admin access required.' even though the API would allow them. Pre-existing app-wide pattern (AdminEvents does the same) — consider exposing an is_admin flag from /auth/me."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter24.py",
+    "/app/backend/tests/seed_iter24_ui.py",
+    "/app/test_reports/pytest/iter24.xml"
+  ],
+  "action_items": [
+    "Return 401 (not 403) from GET /api/admin/analytics when unauthenticated — switch to deps.require_admin.",
+    "Remove the unused `admin` parameter from admin_list_reports signature.",
+    "Optional: add nav links (admin menu) for /admin/reports and /admin/analytics."
+  ],
+  "critical_code_review_comments": [
+    "reports_router PATCH: `target_deleted` is only set when delete_target && status=='resolved'; the duplicate auto-resolve $set reuses `updates` before target_deleted is added, so duplicates lack the flag — verified acceptable but slightly inconsistent audit data.",
+    "GET /api/admin/reports hydrates targets in an N+1 loop (up to 500 queries per call); fine at current scale, consider $lookup/batched find if the queue grows.",
+    "scheduler._sunday_digest_job builds html/subject before the atomic digest_sent_at claim — wasted work on contention only, correctness is fine (claim.modified_count guard verified idempotent in tests)."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter24.py",
+    "/app/backend/tests/seed_iter24_ui.py"
+  ],
+  "success_rate": {"backend": "97% (32/33)", "frontend": "100% of tested flows"},
+  "seed_data_creation": "All test data prefixed TEST_iter24_/TEST_iter24ui_ (users, sessions, posts, comments, discussions, reports, one event in TEST_iter24_Market_B) and fully cleaned up after the run (verified 0 leftovers).",
+  "should_call_test_agent_after_fix": false,
+  "should_main_agent_self_test": true,
+  "test_credentials": "No passwords — sessions minted directly in mongo per /app/auth_testing.md; admin via platform_role='admin'.",
+  "context_for_next_testing_agent": "test_iter24.py uses a per-xdist-worker prefix (PYTEST_XDIST_WORKER) because loadscope teardown in one worker was deleting other workers' TEST_ users (caused a flaky 401). Keep that pattern for any shared-prefix cleanup. UI seed helper: `python /app/backend/tests/seed_iter24_ui.py` prints tokens/ids; `CLEANUP=1 python ...` removes them. Comment submit in PostComments requires clicking the Post button (Enter does not submit).",
+  "rca_of_the_issue": "Analytics 401-vs-403: admin_analytics implements its own guard (`if not u or not is_admin(u): 403`) instead of using deps.require_admin, which distinguishes missing session (401) from non-admin (403)."
+}

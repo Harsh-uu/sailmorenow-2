@@ -1,0 +1,46 @@
+{
+  "summary": "Retest of the iteration-21 P0 fixes. Backend: 7/8 pytest cases pass in /app/backend/tests/test_iter22.py (run serially with -n 0). Verified deps.WSManager is now multi-socket per user — 2 and 3 concurrent sockets for the SAME user_id all receive the {type:'comment.count'} broadcast on comment create; closing one socket does not evict the others (the surviving socket still received the delete broadcast with count 0); DM send() also fans out to all of a user's sockets. Verified _verify_svix_signature timestamp freshness: otherwise-valid signature with svix-timestamp=0, now-3600s, now+3600s, or a non-numeric timestamp -> 401; fresh (now, and now-240s) valid signature -> 200; missing headers -> 401; bad signature -> 401; dev bypass (secret unset) -> 200. /api/auth/ws-token still 401 unauth / {user_id, token} authed. Frontend: WebSocketProvider mounts once; /feed now updates the comment badge live on the FIRST card WITH THE PANEL CLOSED and on a SECOND card on the same page (previous regression fixed), and badges clear on comment delete; /messages real-time DM delivery works and keeps working with a /feed tab open in a second tab (multi-socket confirmed end-to-end); /profile Push Preferences panel renders and pref-dm PATCH persists across reload; Admin Events 'Import CSV' + csv-template-<event_id> button downloads recipients-template.csv. NEW BUG FOUND: a self-DM (thread participants [uid, uid]) makes GET /api/messages/threads throw IndexError -> 500, which blanks the entire /messages page with an uncaught runtime error overlay.",
+  "backend_issues": {
+    "critical": [
+      {"endpoint": "GET /api/messages/threads", "issue": "IndexError -> HTTP 500 when a dm_thread has participants where every entry equals the caller (self-DM, e.g. [uid, uid]). messaging_router.py L27: `other_id = [p for p in t['participants'] if p != u['user_id']][0] if len(...) > 1 else ...` — the list comprehension can be empty even when len(participants) > 1. Impact: one bad thread permanently 500s the whole Messages page for that user (reproduced in the browser: 'Uncaught runtime errors: Request failed with status code 500'). Fix: guard with next((p for p in participants if p != uid), uid), and/or reject POST /api/messages/{recipient_id} when recipient_id == caller.", "priority": "HIGH"}
+    ],
+    "minor": [
+      {"endpoint": "POST /api/messages/{recipient_id}", "issue": "Allows messaging yourself, which is what creates the malformed [uid, uid] thread; also no validation that recipient_id exists in db.users."},
+      {"endpoint": "current_user_from_token (deps.py)", "issue": "Cookie is preferred over the Authorization header, so a Bearer token is silently ignored when a session cookie is present on the same client. Not a defect per se, but it silently impersonated the cookie user during testing — worth documenting/inverting the precedence."},
+      {"endpoint": "WS /api/ws/{user_id}", "issue": "Pre-accept close(4401) is still surfaced by the ingress as an HTTP 403 handshake failure (carried over from iteration 21; not a regression)."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [
+      {"flow": "/messages page load", "issue": "When GET /api/messages/threads 500s (self-DM data), Messages.jsx has no error state — CRA overlay shows 'Uncaught runtime errors' and the conversation list is empty. Add try/catch + inline error state around the threads fetch.", "affected_selectors": ["[data-testid^=\"thread-\"]"]}
+    ],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter22.py",
+    "/app/backend/tests/seed_iter22_ui.py",
+    "/app/test_reports/pytest/iter22.xml"
+  ],
+  "action_items": [
+    "Fix messaging_router.list_theads other_id resolution (IndexError -> 500) and/or block self-DMs; add an error state to Messages.jsx for a failed threads fetch."
+  ],
+  "critical_code_review_comments": [
+    "deps.WSManager multi-socket implementation looks correct: send()/broadcast() iterate a copy of the set and disconnect only the failing socket. No further issues found.",
+    "WebSocketContext.jsx: single socket + subscriber fan-out is correct; onclose retries after 3s. Minor — the retry loop has no max attempts/backoff cap, so a permanently failing /auth/ws-token would poll every 5s forever.",
+    "PostComments.jsx subscribe effect depends on [post.id, open, subscribe] — subscribe is re-created on every provider render (not memoized with useCallback), so every card re-subscribes on each provider re-render. Harmless today (Set add/delete) but wrap subscribe in useCallback to avoid churn.",
+    "/auth/ws-token still returns the raw long-lived session token to JS (carried over from iteration 21); a short-lived single-use ticket would be safer."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter22.py",
+    "/app/backend/tests/seed_iter22_ui.py",
+    "/app/test_reports/iteration_22.json"
+  ],
+  "success_rate": {"backend": "87.5% (7/8; the 1 failure is the newly found self-DM 500)", "frontend": "100% (all retested flows pass)"},
+  "seed_data_creation": "Ephemeral TEST_user22_* / TEST_ui22_* users+sessions, 2 posts, 1 event, comments and DM threads — all deleted after the run (verified 0 leftovers). RESEND_WEBHOOK_SECRET was temporarily added to /app/backend/.env for the signed-webhook test and removed afterwards (verified absent; backend restarted and healthy).",
+  "should_call_test_agent_after_fix": false,
+  "should_main_agent_self_test": true,
+  "test_credentials": "No passwords; sessions minted in Mongo per /app/auth_testing.md",
+  "context_for_next_testing_agent": "Both iteration-21 P0s are confirmed fixed (multi-socket WSManager + svix timestamp skew). Run tests/test_iter22.py SERIALLY (-n 0) — TestResendWebhook restarts the backend and would 502 xdist workers; also note writing files under /app/backend triggers a hot reload, which caused one transient 502 in my first run. The only open defect is TestSelfThreadRegression (GET /api/messages/threads 500 on a [uid,uid] thread). When driving APIs from Playwright, do NOT use page.request with a session cookie set — the backend prefers the cookie over the Bearer header, so 'second user' calls execute as the logged-in user (this is how the self-DM thread got created); use urllib/requests with a browser User-Agent instead (Cloudflare 403s the default urllib UA).",
+  "rca_of_the_issue": "list_threads computes the other participant with `[p for p in t['participants'] if p != u['user_id']][0]` guarded only by `len(participants) > 1`. A self-DM stores participants=[uid, uid], so len==2 but the filtered list is empty -> IndexError -> unhandled 500. The self-thread itself is created because POST /api/messages/{recipient_id} does not reject recipient_id == caller."
+}

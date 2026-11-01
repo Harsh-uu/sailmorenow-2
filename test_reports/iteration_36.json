@@ -1,0 +1,50 @@
+{
+  "summary": "Iteration 36 / Phase P full test pass. Backend: 15/15 pytest tests green (GET /api/u/{handle} happy path + 404 + case-insensitive + @-prefix + no-PII shape; POST /api/contact validation matrix + persistence + monkeypatched send_email recipient/reply_to/HTML-escape assertions). Frontend: all 4 features verified end-to-end via Playwright with seeded sessions — /u/:handle page (render, handle label, DM CTA visibility rules, 404 state, case-insensitive + @-prefix URLs), MentionTextarea in Messages composer (popover + '@handle ' insertion + send), MentionTextarea in CommunityHub create modal (popover + insertion + forum topic posts and appears), /contact inline form (progressive submit enablement + success state), AdminReports inline sparkline + 'climbing' trend badge against seeded 8-week report history. One real backend defect found and fixed in-scope (undefined `logger` -> NameError/500).",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "POST /api/contact", "issue": "FIXED BY TESTER: `logger.exception(...)` in the mailer except-branch referenced an undefined name (ruff F821). Any send_email exception turned the intended fail-soft path into a NameError -> 500 and skipped the contact_messages insert. Added `import logging` + `logger = logging.getLogger('smn.directory')` to routers/directory_router.py. Regression test: TestContactForm::test_mailer_failure_does_not_500."},
+      {"endpoint": "POST /api/contact", "issue": "No rate limiting / captcha on a fully public endpoint that triggers outbound email + DB writes. Abuse vector worth a simple per-IP throttle."},
+      {"endpoint": "POST /api/contact", "issue": "Body is typed as raw `Dict[str, Any]` instead of a Pydantic model, so validation is hand-rolled. Recommend a ContactMessage schema in schemas.py for consistency with the rest of the routers."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "Messages (via HandleProfile DM CTA)", "issue": "HandleProfile links to /messages?to=<user_id>; Messages resolves the peer name only from GET /boat-pros, so DM-ing a non-pro member shows the thread header hardcoded as 'Boat Pro' instead of the member's name. Verified: DM to a sailor rendered header 'Boat Pro'.", "selector": "[data-testid=\"handle-dm\"] -> /messages?to=", "priority": "MEDIUM"},
+      {"component": "AdminReports / Sparkline", "issue": "Cosmetic: with leading zero-count weeks the sparkline renders a long flat stroke that reads as a stray horizontal rule between the 'WEEKLY REPORT VOLUME' label and the trend badge. Consider trimming leading zeros or clipping to the non-zero window.", "selector": "[data-testid=\"reports-weekly-spark\"]", "priority": "LOW"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "AdminReports weekly card header", "issues": ["Inline sparkline flat-baseline artifact (see ui_bugs); otherwise contrast and spacing of the climbing/cooling badge are fine."]},
+      {"screen": "/contact", "issues": ["No inline field-level validation hints — the submit button silently stays disabled until name+valid email+message>=10, so a user with a malformed email gets no feedback. Consider a hint under the email/message fields."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter36_phase_p.py",
+    "/app/backend/tests/seed_iter36_ui.py",
+    "/app/test_reports/pytest/iter36.xml"
+  ],
+  "action_items": [
+    "Resolve the DM peer name in Messages for non-Boat-Pro users (use GET /api/u/<handle> or a /users/<id> lookup instead of only /boat-pros) so threads opened from /u/:handle show the real name.",
+    "Optional: convert POST /api/contact body to a Pydantic schema and add per-IP rate limiting.",
+    "Optional cosmetic: trim leading zero weeks from the AdminReports sparkline series."
+  ],
+  "critical_code_review_comments": [
+    "routers/directory_router.py used `logger` without defining it — ruff F821 was already flagging this. Add ruff/lint to the pre-commit path; this class of bug silently converts fail-soft handlers into 500s.",
+    "GET /api/u/{handle} correctly projects a field allow-list (no _id, no email) — good. Note it does no rate limiting and permits unauthenticated enumeration of handles; acceptable for a public directory but worth an explicit decision.",
+    "GET /api/u/{handle} does `db.users.find_one({'handle': h})` with an exact lowercase match. Case-insensitivity therefore depends on handles always being stored lowercase at write time. Verify the handle-set/onboarding path lowercases before insert, and add a unique index on `handle` (a duplicate 'jennmcdonald'/'jennmcdonald2' pattern already exists in the DB).",
+    "MentionTextarea fires GET /users/search on every token change with a 120ms debounce and no minimum length beyond 1 char — fine now, but consider caching to reduce chatter in the Messages composer."
+  ],
+  "updated_files": [
+    "/app/backend/routers/directory_router.py",
+    "/app/backend/tests/test_iter36_phase_p.py",
+    "/app/backend/tests/seed_iter36_ui.py"
+  ],
+  "success_rate": {"backend": "100% (15/15)", "frontend": "100% (all 4 Phase P flows verified)"},
+  "seed_data_creation": "seed_iter36_ui.py minted TEST_iter36_admin (email = ADMIN_EMAILS[0], platform_role=admin), TEST_iter36_member, TEST_iter36_target with handles test36admin/test36member/test36target and 7-day sessions, plus 8 reports spanning 8 weeks (recent 2wk=5, prior 2wk=3 -> 'climbing'). ALL seed data, discussions, messages and contact_messages created during testing were deleted after the run. Re-run `python /app/backend/tests/seed_iter36_ui.py` to recreate.",
+  "should_call_test_agent_after_fix": false,
+  "should_main_agent_self_test": true,
+  "test_credentials": "No passwords (Emergent Google OAuth). Use /app/backend/tests/seed_iter36_ui.py to mint sessions; it prints ADMIN_TOKEN / MEMBER_TOKEN and the target handle.",
+  "context_for_next_testing_agent": "AdminReports is gated on frontend by `user.platform_role === 'admin'` while the backend gates on ADMIN_EMAILS — an admin-email user WITHOUT platform_role:'admin' on their user doc passes the API but gets 'Admin access required.' in the UI. seed_iter36_ui.py does NOT set platform_role; set it manually (db.users.update_one({user_id}, {$set:{platform_role:'admin'}})) before testing any /admin/* page. CommunityHub's create modal defaults to kind='blog', which posts as status='pending' and is therefore invisible on the Blog tab — switch to the Forum tab first if you want to assert the post appears. Messages requires ?to=<user_id> or a selected thread before data-testid='message-input' exists.",
+  "rca_of_the_issue": "POST /api/contact wrapped its send_email call in try/except intending to fail soft, but the except body called `logger.exception(...)` while `logger` was never imported or defined in routers/directory_router.py (module-level logger lives in server.py). Repro: monkeypatch mailer.send_email to raise -> NameError propagates out of contact_form, returning 500 and skipping the db.contact_messages.insert_one that follows, so the submission is lost entirely. This is normally masked because mailer.send_email is documented as never raising (returns {'status':'skipped'} with no key), making the branch dead code in the happy environment. Fix applied: added `import logging` and a module-level `logger = logging.getLogger('smn.directory')`; ruff F821 now clean and the regression test passes."
+}

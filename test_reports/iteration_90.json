@@ -1,0 +1,32 @@
+{
+  "summary": "Iter 90 — new feature batch (sponsors + review-highlights + sailors_seeking_crew stat + pricing 3-audience + testimonials strip + live-now sailors chip + logged-out /directory & /clubs + events sponsor section + admin/sponsors + mobile register months pills + mobile SailFlow removal). BACKEND 11/11 PASS (test_iter90_sponsors_highlights_stats.py): /api/stats/public now returns sailors_seeking_crew (int) ✅; /api/review-highlights returns list of {quote, attribution, market, rating} with rating>=4 and non-empty comment ✅; public GET /api/sponsors returns active-only ✅; admin CRUD POST/GET/PATCH/DELETE /api/admin/sponsors as jenn works (requires image_url+link_url, returns 400 otherwise) ✅; non-admin rejected 403 on both admin list + create ✅; patch active:false hides from public list ✅; delete returns 200 + subsequent patch 404 ✅. WEB PASS: /pricing has three audience pills (Sailors & Owners, Boat Pros, Clubs & Orgs) wired to h1 headline change — 'More Sailing. More Community.' / 'Get listed. Get hired.' / 'Get listed. Gain members.' ✅; Clubs & Orgs panel shows 'Sign up free' + mailto 'Contact us' link ✅; Sailors shows 'Just want to browse? Sign up for free today' and Boat Pros shows the browse link + 'browse-only, no public listing' note ✅; Stripe test-mode banner present ✅; duration pills 1/3/6/12 (sailor) switching updates checkout-summary — 3-month shows $6.29/mo + 'billed $18.87 every 3 months' ✅; testimonials strip ('What sailors are saying') renders 6 highlight cards with quote + 'Attribution · Market' ✅. HOME: live-now-widget's FIRST chip reads '2 sailors looking for crew' with anchor href=/crew-bank ✅. /directory and /clubs LOGGED OUT render (no AuthGate) — /directory shows guest CTA ('Just browsing? Sign in or create an account…') and category-grouped preview (headings 'Canvas', 'Detailing - Exterior', 'Sailing Instruction' with cards 'River City Canvas', 'Harbor Shine Detailing & School', 'Wash N Go'); /clubs shows 25 partner cards, no AuthGate ✅. /events as JENN shows mailto 'mailto:info@sailmorenow.com?subject=Community%20Sponsor%20inquiry' = 'Become a Sponsor' CTA ✅. /admin/sponsors loads with heading 'Community Sponsors', add form (name/image/link + Active checkbox + Add sponsor btn), empty-state copy; admin nav 'nav-admin-sponsors' link labelled 'Sponsors' ✅. MOBILE PASS: feed does NOT contain 'SailFlow' or 'Live wind' text — card removed ✅. /register picks reg-months-1/3/6/12 (−10/−15/−20%) when account_type=sailor or boat_owner; shows reg-months-1/6/12 (−10/−20%) for boat_pro; partner (Club/Org) correctly shows NO duration picker ✅. /pricing?months=6 pre-selects 6-month (highlighted) → '$5.94/mo' with 'billed $35.65 every 6 months' banner and Checkout with Stripe test-mode banner ✅. ONE PARITY NOTE: Web live-now sailors chip and backend sailors_seeking_crew both report 2 — reflects standalone-crew bank data; could not similarly verify a counter on mobile (deferred). NOT TESTED (deferred per request): home-page merge, menu-scroll-to-section, mobile logged-out directory blur.",
+  "platforms_tested": ["web", "mobile"],
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "web": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+    "mobile": {"ui_bugs": [], "integration_issues": [], "design_issues": [], "react_native_issues": []}
+  },
+  "parity_issues": [],
+  "test_report_links": [
+    "/app/backend/tests/test_iter90_sponsors_highlights_stats.py",
+    "/app/test_reports/pytest/iter90_results.xml"
+  ],
+  "action_items": [
+    "None critical. The iter89 BoatPro seed gaps (salishmarinaservices + demo-wash-n-go) are out-of-scope for iter90 — iter89 tests still flag them if main agent chooses to re-run."
+  ],
+  "critical_code_review_comments": [
+    "sponsors_router.py is clean, idempotent, properly uses require_admin for /admin/* and public /sponsors filters active:{$ne:false} to also surface sponsors where active flag was never set. Good.",
+    "content_router.py review-highlights filters rating>=4 AND comment length>=10, with top-up fallback to approved testimonials when sparse. Attribution uses first+last-initial — PII-safe. Good.",
+    "community_router.py public_stats now adds sailors_seeking_crew via a direct count on crew_bank_standalone with status=seeking and non-expired — matches spec exactly.",
+    "Admin sponsors UI exposes testIDs admin-sponsors-page + nav-admin-sponsors; good for QA.",
+    "Mobile register correctly hides the duration picker for partner (Club/Org) account type (which signs up free)."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "100% (11/11)", "frontend": "web + mobile features all PASS"},
+  "test_credentials": "Admin: jenn@sailmorenow.com / [REDACTED]. Mobile preview served at https://boat-community-1.expo.preview.emergentagent.com (with -1).",
+  "seed_data_creation": "Test created and deleted one TEST_Iter90_SponsorA sponsor (CRUD lifecycle). No residual test data.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "All iter90 features landed and verified. Prior iter89 remaining gaps (salishmarinaservices missing Diesel Engine Specialist; demo-wash-n-go missing from boat-pros) are seed-data issues, independent of iter90 batch. If main agent fixes those, re-run /app/backend/tests/test_iter88_categories_and_crew.py (2 failing). For iter90 regression, use /app/backend/tests/test_iter90_sponsors_highlights_stats.py.",
+  "rca of the issue": ""
+}

@@ -1,0 +1,46 @@
+{
+  "summary": "Iteration 18 polish-batch retest (backend + frontend). New suite /app/backend/tests/test_iter18.py (19 tests) covers aggregator.upcoming_event_predicate custom field kwargs, /api/crew-bank/open past-filter parity, and /api/digest/preview ?market= override. Full regression across all suites: 289 passed, 13 skipped, 2 xfailed (0 failures). Frontend Playwright verified: Events 'All day' label vs timed events, Directory + DirectoryDetail Avatar onError fallbacks (dead photo_url -> letter tile, no broken-image glyph, hero stays h-56 within card, live photo still renders <img>), and /digest market picker (all 10 PNW markets, '(yours)' suffix on primary, refetch with ?market=, h1 update, Scouting pill). All targeted features work.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "GET /api/digest/preview", "issue": "?market= is not validated against MARKETS — ?market=Atlantis returns 200 with market:'Atlantis' and an empty digest instead of 400. Marked xfail in test_iter18.py::TestDigestMarketOverride::test_invalid_market_rejected."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "Events.jsx formatEventDate", "issue": "All-day events are formatted with new Date(startsAt).toLocaleDateString() in the browser's local TZ. For the app's own PNW audience (America/Los_Angeles) a stored '2026-08-21T00:00:00+00:00' renders 'Aug 20, 2026 · All day' — off by one day. Verified: node toLocaleDateString(en-US, LA) => 'Aug 20, 2026'. Test container is UTC so the assertion passed there. Fix: format all-day dates with { timeZone: 'UTC' } (or slice the ISO date and build the label from the string).", "selector": "[data-testid=\"event-{id}\"]", "priority": "HIGH"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "DirectoryDetail hero fallback", "issues": ["Fallback letter uses fallbackClassName 'text-[#1F3F5B]' on the tinted teal tile; for a premium pro the hero sits on the #1F3F5B navy card, so a dead photo shows navy-on-teal/15 with poor contrast. Consider tier-aware fallback color like the Directory card does."]},
+      {"screen": "/digest scouting a non-primary market", "issues": ["Community chatter copy still reads \"across your market's feed this week\" while previewing another market — should say the selected market."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter18.py",
+    "/app/test_reports/pytest/pytest_iter18.xml"
+  ],
+  "action_items": [
+    "Events.jsx: render the all-day date in UTC (or from the ISO string) so PNW users don't see the previous day.",
+    "Optional: validate ?market= in /api/digest/preview against MARKETS and return 400 for unknown markets (then remove the xfail in test_iter18.py).",
+    "Optional polish: tier-aware fallback color for the DirectoryDetail hero Avatar; market-aware 'Community chatter' copy on /digest."
+  ],
+  "critical_code_review_comments": [
+    "aggregator.upcoming_event_predicate: correct — identical $expr/$gte/$ifNull structure for both default and ('event_starts_at','event_ends_at') call sites; community_router.open_crew_slots and admin_router now share it (unit-asserted).",
+    "open_crew_slots combines the shared predicate with event_starts_at <= horizon — verified: days=3 hides a +30d slot, days=60 shows it; response excludes _id and user_email and is sorted by event_starts_at.",
+    "Avatar.jsx ROUNDED map + onError works for both 'xl' cards and 'none' full-width hero (no img element left in the DOM after failure, so no broken-image glyph).",
+    "DirectoryDetail renders the hero only when pro.photo_url is truthy, so pros with no photo get no hero at all — intentional but worth confirming."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter18.py",
+    "/app/frontend/src/pages/Directory.jsx (added testId=\"pro-avatar-{user_id}\" to Avatar)",
+    "/app/frontend/src/pages/DirectoryDetail.jsx (added testId=\"pro-hero-photo\" to hero Avatar)"
+  ],
+  "success_rate": {"backend": "100% (289 passed / 13 skipped / 2 xfailed, 0 failed)", "frontend": "100% of targeted flows passed (1 latent TZ bug found by inspection)"},
+  "seed_data_creation": "Temporary TEST_userH_* rows (user+session, all-day and timed events on 2026-08-21, boat_pro with dead photo_url, crew_bank rows) — all deleted after the run. seed_alex.identity_verified verified still true post-run.",
+  "should_call_test_agent_after_fix": false,
+  "should_main_agent_self_test": true,
+  "test_credentials": "Mongo-minted session tokens per /app/auth_testing.md; browser User-Agent header required for API calls.",
+  "context_for_next_testing_agent": "test_iter18.py uses RUN_PREFIX TEST_userH_<worker>_ and is xdist-loadscope safe. Full suite runtime ~180s with pytest.ini defaults (-n 2 --dist loadscope). Container TZ is UTC — any date-label test must explicitly check the America/Los_Angeles rendering (via browser_context timezone_id or Intl timeZone) to catch off-by-one-day bugs. Restart-dependent tests in test_iter17.py need SMN_ALLOW_RESTART=1.",
+  "rca_of_the_issue": "All-day label off-by-one: backend canonicalizes date-only starts_at to '<date>T00:00:00+00:00'. Events.jsx then passes that instant to toLocaleDateString() without a timeZone, so any browser west of UTC maps the UTC midnight instant to the previous calendar day. Reproduce: set browser TZ to America/Los_Angeles, load /events with an all-day event -> label shows the day before."
+}

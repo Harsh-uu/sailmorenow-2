@@ -1,0 +1,51 @@
+{
+  "summary": "Phase F full-stack verification. Wrote /app/backend/tests/test_phase_f.py (34 tests, xdist-safe RUN_PREFIX 'TEST_userF_') covering GET /api/posts comment_count aggregation, aggregator._strip_html unit cases, the server startup HTML migration (verified with a real backend restart), PATCH /api/admin/events/{id}/email-recipients auth/validation/persistence, POST /api/events/{id}/crew email fan-out + lowercase dedupe (in-process endpoint invocation with community_router.send_email captured), and scheduler._sunday_digest_job (send-once, 6-day window, opt-out, empty-digest skip, claim-before-send). All 34 Phase F tests pass. Full suite: 194 passed / 1 failed / 7 skipped. Frontend Feed verified with Playwright: 'Show comments (2)' rendered pre-load from post.comment_count, 'Show comments' (no number) for zero-comment post, live increment to (3) after submit and persistence after reload. Events page shows sanitized plain-text descriptions (e.g. 'REGISTER HERE, NOTICE BOARD, RESULTS (https://www.regattanetwork.com/event/30639)') with zero residual HTML tags; mongo confirms 0 events with HTML remaining. The one genuine failure is a pre-existing (non-Phase-F) bug: GET /api/events serves stale past events.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "GET /api/events", "issue": "PRE-EXISTING (not Phase F): 49 of 78 events (41 aggregator + 8 community) already ended and are still returned/rendered. Today is 2026-08-21 yet the Events page opens with Jul 13 / Jul 18 / Jul 20 items. list_events applies no past-date filter; purging only happens in the Sunday 03:00 PT _weekly_job and the admin aggregate endpoint, and the preview backend restarts reset the scheduler before those cron slots fire. Fix: filter at read time (or purge on startup). Reproduced by tests/test_events_aggregator_bugfix.py::TestPastEventsStillFiltered."},
+      {"endpoint": "PATCH /api/admin/events/{id}/email-recipients", "issue": "Emails are only trimmed, never lowercased, before persisting, while _maybe_email_organizer dedupes case-insensitively. Storing 'Ops@Partner.org' and 'ops@partner.org' in the same array yields one dedupe-suppressed entry, so admins get silent partial saves. Suggest .lower() on save (dedupe within the array too)."},
+      {"endpoint": "GET /api/events", "issue": "N+1 queries: one aggregate + one count_documents per event inside the loop (up to 1000 round trips for 500 events). Fold into two $group aggregations like list_posts already does for comment_count."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "Feed post author avatar", "issue": "Avatar <img> has no onError fallback and no max-width containment: when the picture URL fails to load the raw URL alt text renders full-size and overflows outside the card, overlapping the author name (seen with via.placeholder.com/150, the URL used by /app/auth_testing.md and possibly by real users with dead avatar URLs).", "selector": "img (post author avatar in Feed card)", "priority": "LOW"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Events calendar", "issues": ["Top of the calendar is filled with events that ended weeks ago (Jul 13-25 while today is Aug 21) — same root cause as the GET /api/events backend item; makes the page look abandoned."]},
+      {"screen": "Event card description (aggregator)", "issues": ["_strip_html joins consecutive anchors onto one line, so 'REGISTER HERE, NOTICE BOARD, RESULTS (url)' keeps only one URL visible — link labels lose their targets. Cosmetic, consider newline between anchors."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_phase_f.py",
+    "/app/backend/tests/seed_phase_f_ui.py",
+    "/app/test_reports/pytest/pytest_results_iter13.xml"
+  ],
+  "action_items": [
+    "Filter/purge past events in GET /api/events (or purge on startup) — 63% of served events are already over.",
+    "Lowercase + dedupe email_recipients in PATCH /api/admin/events/{id}/email-recipients so the stored array matches the case-insensitive fan-out dedupe.",
+    "Collapse the per-event registration/crew_count queries in list_events into aggregations (N+1).",
+    "Add an onError avatar fallback + size containment in the Feed post header."
+  ],
+  "critical_code_review_comments": [
+    "comment_count is computed with one $group aggregation over all visible post ids — good, no N+1; consider an index on comments.post_id (already created in server startup).",
+    "_sunday_digest_job claims digest_sent_at with a conditional update BEFORE send_email (verified idempotent across back-to-back runs) and skips empty digests without flipping the flag — verified.",
+    "_maybe_email_organizer runs fire-and-forget inside the request; if send_email raises for recipient #1 the remaining recipients are skipped because the loop is inside a single try/except. Consider per-recipient try/except.",
+    "GET /api/events has no pagination bound beyond to_list(500) plus per-doc queries; will degrade as the aggregator grows."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_phase_f.py (new)",
+    "/app/backend/tests/seed_phase_f_ui.py (new, UI seed helper)",
+    "/app/backend/tests/test_crew_bank_v3.py (test-only: BASE_URL now falls back to /app/frontend/.env; module skips when its hard-coded legacy session tokens are no longer seeded — previously a collection KeyError)",
+    "/app/backend/tests/test_refactor_v4.py (same test-only fix)"
+  ],
+  "success_rate": {"backend": "99% (194/195 executed; the single failure is the pre-existing stale-past-events bug, all 34 Phase F tests pass)", "frontend": "100% of Phase F flows (comment_count pre-load/live/persisted, sanitized event descriptions)"},
+  "seed_data_creation": "Ephemeral TEST_userF_* users/events/posts/comments (module-teardown cleaned) and TEST_userFUI_* Feed fixtures (manually deleted after the Playwright run). Digest tests use synthetic markets TEST_MarketF_*. seed_alex.identity_verified=true preserved (asserted).",
+  "should_call_test_agent_after_fix": false,
+  "should_main_agent_self_test": true,
+  "test_credentials": "No passwords — mongo-minted session tokens per /app/auth_testing.md; admin via platform_role='admin'.",
+  "context_for_next_testing_agent": "Run the suite exactly as configured (pytest tests/ with -n 2 --dist loadscope). TestStartupMigration::test_existing_aggregator_html_cleaned_on_restart is gated behind SMN_ALLOW_RESTART=1 because it restarts the backend and caused transient 502s in the parallel worker; it PASSED when run as `SMN_ALLOW_RESTART=1 pytest tests/test_phase_f.py -n 0`. Crew-join fan-out is asserted by calling routers.community_router.join_event_crew in-process (session_token=None must be passed explicitly, else FastAPI Cookie default leaks into mongo) with cr.send_email monkey-patched and a 1.5s sleep for the fire-and-forget task; sys.modules for scheduler/notifications/mailer/deps/routers.* are popped before each asyncio.run to avoid motor loop binding. Only open failure: tests/test_events_aggregator_bugfix.py::TestPastEventsStillFiltered (stale past events served by GET /api/events).",
+  "rca_of_the_issue": "Stale events: aggregator/community events whose ends_at is in the past are only deleted by scheduler._weekly_job (Sunday 03:00 PT) and the admin aggregate endpoint. Preview backend restarts recreate the APScheduler with fresh cron triggers, so the purge window is repeatedly missed and GET /api/events — which applies no date predicate — keeps returning them (41 aggregator + 8 community docs as of 2026-08-21). Read-time filtering (or a startup purge using aggregator.past_event_predicate) removes the dependence on the cron firing."
+}

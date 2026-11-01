@@ -1,0 +1,74 @@
+{
+  "summary": "Phase A testing (notifications, activity tracking, post expiration, scheduler) + iteration 4/5 regression. Backend: 20/21 pytest checks pass (/app/backend/tests/test_phase_a.py). Frontend: NotificationsBell fully verified (anon gating, badge=3, modal open, mark-all-read zeros badge, click navigates + persists read=true in mongo). One real gap: the crew_join in-app notification described in the request is NOT implemented in POST /api/events/{id}/crew.",
+  "backend_issues": {
+    "critical": [
+      {
+        "endpoint": "POST /api/events/{event_id}/crew",
+        "issue": "crew_join in-app notification is NOT emitted. routers/community_router.py imports `notify` (line 16) but never calls it; only _maybe_email_organizer() runs, and that returns early unless ev.organizer_email exists. Verified: joining a community event with organizer_id set produced zero notifications for the organizer. Need `await notify(user_id=ev['organizer_id'], kind='crew_join', ...)` guarded by `organizer_id and organizer_id != u['user_id']`, only when is_new.",
+        "priority": "HIGH"
+      }
+    ],
+    "minor": [
+      {
+        "endpoint": "GET /api/posts",
+        "issue": "Expiry/expired filtering happens in Python AFTER `.to_list(200)`. Once the collection exceeds 200 docs the feed will silently under-fill (expired posts consume the limit). Move `expired`/`expires_at` predicates into the mongo query."
+      },
+      {
+        "endpoint": "GET /api/admin/scheduler/status",
+        "issue": "next_run() only reports the 'events_weekly_sync' job; the new 'expiring_nightly' job (registered OK, confirmed in supervisor logs) is not surfaced. Response returns {next_run: 2026-08-23T03:00:00-07:00, cron: 'Sundays 03:00 America/Los_Angeles'} — correct but incomplete for observability."
+      },
+      {
+        "endpoint": "notifications.activity_status",
+        "issue": "'today' bucket uses delta.days <= 1, so a user last active ~47h ago still shows 'today'. Consider comparing calendar dates."
+      }
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {
+        "component": "NotificationsBell",
+        "issue": "ESLint errors: two empty catch blocks (lines 17, 20) — `no-empty`. Also `Link` is imported but never used. Cosmetic/lint only, no runtime impact.",
+        "selector": "[data-testid=\"bell-btn\"]",
+        "priority": "LOW"
+      },
+      {
+        "component": "NotificationsBell.openItem",
+        "issue": "Uses `window.location.href = n.link` which triggers a full page reload instead of client-side react-router navigation (Link/useNavigate already available). Works, but loses SPA state and is noticeably slower.",
+        "selector": "[data-testid^=\"notif-\"]",
+        "priority": "LOW"
+      }
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {
+        "screen": "Notifications modal",
+        "issues": ["Timestamp line uses text-[10px] text-slate-400 on white — very low contrast (~2.3:1), below WCAG AA for small text."]
+      }
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_phase_a.py",
+    "/app/test_reports/pytest/phase_a_results.xml"
+  ],
+  "action_items": [
+    "Implement the crew_join notify() call in POST /api/events/{event_id}/crew (organizer_id present, not self, only on new signup). Aggregator events (no organizer_id) must stay silent.",
+    "Move the expires_at/expired filter into the mongo query in GET /api/posts instead of post-filtering the 200-doc page.",
+    "Include the 'expiring_nightly' job in GET /api/admin/scheduler/status output.",
+    "Fix NotificationsBell lint (empty catch blocks, unused Link import) and switch openItem to useNavigate.",
+    "Darken the notification timestamp text for contrast (slate-500+)."
+  ],
+  "critical_code_review_comments": [
+    "community_router.py: `from notifications import notify` is dead code — the crew_join feature claimed in the changelog was never wired.",
+    "messaging_router.py DM notify() is inside a bare `except Exception: pass` — silent failure. Log the exception at minimum.",
+    "scheduler._nightly_job filter `extension_prompted_at: {$in: [None, False]}` will NOT match posts where the field is absent unless mongo treats missing==null — it does for $in:[null], so this is fine; confirmed create_post never sets the field.",
+    "notifications.notify() correctly pops _id before returning; notifications_router projections all use {_id: 0}. Good."
+  ],
+  "updated_files": ["/app/backend/tests/test_phase_a.py"],
+  "success_rate": {"backend": "95% (20/21)", "frontend": "100% (6/6 NotificationsBell flows)"},
+  "seed_data_creation": "All test data created with TEST_/TESTP_/TESTEV_/TESTFE prefixes and fully deleted in teardown. Verified 0 leftovers in users/posts/events/notifications.",
+  "should_call_test_agent_after_fix": true,
+  "should_main_agent_self_test": false,
+  "test_credentials": "No passwords. Sessions minted directly in mongo test_database per /app/auth_testing.md (helper mint_user() in test_phase_a.py). Admin gate = ADMIN_EMAILS=jenn@sailmorenow.com.",
+  "context_for_next_testing_agent": "PASSED: GET /api/notifications 401 anon + {items,unread} authed; poll bumps last_active_at -> /api/activity/{id} == 'today'; all 5 activity buckets (never/today/this_week/this_month/dormant) verified by back-dating last_active_at. PATCH /notifications/{id}/read marks one (unread 3->2), POST /mark-all-read returns {marked:2} and zeros unread; both 401 anon. POST /api/posts honours allow_comments=false and expires_days=5 (and defaults true/30); a mongo-inserted post with past expires_at is correctly hidden from GET /api/posts. POST /posts/{id}/extend: author 200 + expires_at persisted + extension_prompted_at cleared to null; non-author 403; anon 401. POST /api/messages/{recipient} creates kind='dm' notification with link=/messages?to={sender}. Aggregator event crew join emits nothing (correct). Regression: /api/, /markets, /events, /boat-pros, /crew-bank/open, /payments/packages all 200. Scheduler: expiring_nightly registered (2:15 AM PT), weekly still Sun 03:00 PT. NOTE 1: external curl/requests needs a browser User-Agent header or the preview edge returns 403. NOTE 2: pytest.ini enables xdist; test_phase_a.py is now xdist-safe via a PYTEST_XDIST_WORKER-derived RUN_PREFIX. ONLY OPEN BUG: missing crew_join notification.",
+  "rca_of_the_issue": "crew_join notification: join_event_crew() in /app/backend/routers/community_router.py (lines 284-348) only calls `asyncio.create_task(_maybe_email_organizer(...))`. _maybe_email_organizer returns immediately when ev.get('organizer_email') is falsy and never calls notify(). Repro: insert an event with organizer_id (no organizer_email), POST /api/events/{id}/crew as a premium user, then GET /api/notifications as the organizer -> empty list. Fix: add an explicit notify() for ev['organizer_id'] in join_event_crew when is_new and organizer_id != joiner."
+}

@@ -1,0 +1,50 @@
+{
+  "summary": "Iter 86 — E2E of the two batches of PNW sailing-community work on shared FastAPI backend + React web + Expo mobile. All 8 backend tests pass (/app/backend/tests/test_iter86_marketplace_saved_sync.py, /app/test_reports/pytest/iter86_results.xml). Web /community merges Feed+Hub with 4 tabs (community-tab-feed/marketplace/forum/blog). Old /feed and /community-hub redirect to /community (community-hub -> /community?tab=blog). Feed shows month-group-* with month-toggle-* and month-jump-select. Marketplace tab filters For-Sale posts and shows price+condition on cards (post-price-*, post-condition-*); gallery (post-gallery-*) appears when a For-Sale post with multiple photos is expanded. Profile has saved-section with saved-empty when empty and saved-remove-<id> items after saving. Admin /admin/events shows sync-status-card with sync-last, sync-next, sync-now-btn. Events new-event-btn opens inline form; checking 'Volunteer opportunity' reveals volunteer-lead-days select with exactly 4 options (1/2/3/7 days). Mobile feed shows 4 month-toggles + month-jump-btn + save buttons on cards. Mobile new-post For-sale type shows post-price-input, 5 condition chips, photo-add-btn. Mobile new-event's 'Volunteers needed' Switch toggles vol-lead-1/2/3/7 chips (works, but ToggleRow lacks a testID). Mobile /saved lists saved items with saved-remove-<id>; /crew-bank includes 'Open crew spots' and 'Sailors ready to hop on a boat this week' labels; /admin shows admin-sync-card with sync-last/next/now-btn.",
+  "platforms_tested": ["web", "mobile"],
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "web": {
+      "ui_bugs": [],
+      "integration_issues": [],
+      "design_issues": [
+        {"screen": "Community page (any tab, select with options containing <span>)", "issues": ["React hydration warning: '<span> cannot be a child of <option>' — one of the select dropdowns renders a span inside an <option>. Non-blocking, but spams the console on every /community load. Likely the market picker or month-jump-select. Pure cosmetic/console noise."]}
+      ]
+    },
+    "mobile": {
+      "ui_bugs": [
+        {"component": "ToggleRow (new-event.tsx)", "issue": "The 3 ToggleRow switches (This is a race / Volunteers needed / Paid event) have no testID on the Switch or wrapper. Tests must locate them positionally (switches[1]). Suggest testID='event-is-volunteer-toggle' etc. Reference: /app/mobile/app/new-event.tsx:140", "testID": "(missing)", "priority": "LOW"}
+      ],
+      "integration_issues": [],
+      "design_issues": [],
+      "react_native_issues": []
+    }
+  },
+  "parity_issues": [],
+  "test_report_links": [
+    "/app/backend/tests/test_iter86_marketplace_saved_sync.py",
+    "/app/test_reports/pytest/iter86_results.xml"
+  ],
+  "action_items": [
+    "(Optional, LOW) Add testID to the mobile ToggleRow component in new-event.tsx (e.g. event-is-volunteer-toggle, event-is-race-toggle, event-is-paid-toggle) so tests don't rely on positional indexing of role=switch inputs.",
+    "(Optional, cosmetic) Investigate the React hydration warning on /community: 'In HTML, <span> cannot be a child of <option>'. Likely a market or month-jump select rendering a span inside <option>; fix the option children to be plain text."
+  ],
+  "critical_code_review_comments": [
+    "community_router.create_post correctly caps image_urls at 6 (urls[:6]) and derives image_url=urls[0] for back-compat with single-image renderers. Each URL is length-checked via MAX_PHOTO_URL_CHARS.",
+    "community_router.create_comment: now looks up db.discussions when a post isn't found by that id — this is what unblocks the 'post not found' bug when commenting on blog/forum discussions. Round-trip verified by backend test test_comment_on_discussion_succeeds.",
+    "community_router.list_saved returns hydrated post/discussion docs with saved_type + saved_at metadata — enabling the Profile Saved section to render mixed types uniformly.",
+    "community_router.admin_events_sync_status returns a predictable shape {last_run_at,next_run_at,last_inserted,last_updated,last_errors,sources} even when the aggregator has never run (meta=None, next_run=None). The web+mobile admin cards handle null gracefully.",
+    "schemas.PostCreate.image_urls Optional[List[str]], price Optional[float], condition Optional[str]: proper nullable fields. EventCreate.volunteer_reminder_lead_days default 1; EventUpdate.volunteer_reminder_lead_days Optional[int] = None (patch semantics).",
+    "scheduler.volunteer_reminder uses max(1, min(lead,7)) clamping so bad data can't break the daily cron.",
+    "ToggleRow in mobile/app/new-event.tsx has no testID — low-prio testability gap but functionality is correct."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter86_marketplace_saved_sync.py"
+  ],
+  "success_rate": {"backend": "100% (8/8)", "frontend": "web ~10/10 flows, mobile ~7/7 flows"},
+  "test_credentials": "Admin: jenn@sailmorenow.com / [REDACTED] Mobile via localStorage.session_token (JSON-encoded).",
+  "seed_data_creation": "Created TEST86 for_sale post with 10 image URLs (capped to 6), TEST86 Saved post, TEST86 Saved disc (forum), TEST86 comment target (forum, 1 comment), TEST86 Volunteer event (then deleted). All created via admin and prefixed TEST86 for easy cleanup.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "GET /api/events/{id} does NOT exist — use GET /api/events?market=... and filter. Events are PATCHed not PUT. PNW_MARKETS use display-name slugs ('Greater Seattle', not 'greater_seattle'). Posts require `type` field (for_sale|discussion|…). Mobile ToggleRow in new-event.tsx has no testID — click role=switch positionally (index 0=is_race, 1=is_volunteer, 2=is_paid). The web /community-hub route redirects to /community?tab=blog (not just /community). On mobile, the new-post type button label is 'For sale' (lowercase 's'), not 'For Sale' — use exact match or case-insensitive.",
+  "rca of the issue": ""
+}

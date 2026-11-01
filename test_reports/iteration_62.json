@@ -1,0 +1,47 @@
+{
+  "summary": "Dark-mode readability retest (web + mobile). WEB: text-color remap works (text-slate-500/600/700 and text-[#1F3F5B]/[#475569]/[#152a3d] now render as high-luminance neutrals with WCAG AA >= 4.5:1 on dark surfaces). However, a HIGH-severity regression exists: many components still hard-code `bg-white` on cards/nav so the newly-lightened text renders near-white on WHITE and becomes illegible (contrast ~1.07:1). Confirmed on /directory/seed_rigging (main pro card + review cards) and top-nav 'Sign in' button on / . Landing hero/nav headings and content cards that use --smn-surface are fine. LIGHT mode is unchanged (dark overrides correctly scoped to html.dark). MOBILE: dark theme works — Profile/Events/Messages/Boat Pros render dark surfaces (#0B1220 / #1B2740) with light readable text and teal active-tab icon; light mode also OK. Minor: on initial page load the Hub can flash the light theme before useColorScheme() picks up prefers-color-scheme:dark (RN-web timing), then re-renders dark on next paint.",
+  "platforms_tested": ["web", "mobile"],
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "web": {
+      "ui_bugs": [
+        {"component": "Boat Pro detail card (/directory/[id])", "issue": "Card wrapper uses hard-coded bg-white (not .smn-card / --smn-surface). In dark mode, inside content (H1 title 'North Sound Rigging Co.', description, tag chips, contact info) is remapped to near-white by html.dark overrides and renders near-white on WHITE — contrast 1.07:1 (WCAG FAIL). Users cannot read the pro's name, description, or contact info in dark mode.", "selector": "div.bg-white containing h1.text-[#1F3F5B]", "priority": "HIGH"},
+        {"component": "Boat Pro review cards", "issue": "3 review cards use `bg-white rounded-2xl p-5 border border-slate-100` on /directory/seed_rigging — reviewer name, rating meta, review body all render near-white on white in dark mode (contrast 1.07:1).", "selector": "div.bg-white.rounded-2xl.border-slate-100", "priority": "HIGH"},
+        {"component": "Landing top-nav 'Sign in' button", "issue": "Button uses `bg-white text-[#1F3F5B]` on / (landing). In dark mode the text is remapped to var(--smn-heading) (near-white) but the button bg stays white → invisible label. Contrast 1.07:1.", "selector": "button.bg-white.text-[#1F3F5B]", "priority": "MEDIUM"}
+      ],
+      "integration_issues": [],
+      "design_issues": [
+        {"screen": "any surface hard-coded with `bg-white`, `bg-slate-100`, `bg-slate-50` (and similar) but not `.smn-card`", "issues": ["The dark-mode fix only remaps TEXT utilities. It does not remap background utilities. Any component that hard-codes `bg-white` on a card or nav still shows a white panel in dark mode, and the newly-lightened text now becomes illegible ON THAT WHITE. Search /app/frontend/src for `bg-white` (~ many occurrences) and either migrate to `.smn-card` / `bg-[var(--smn-surface)]` OR add a global `html.dark .bg-white{ background: var(--smn-surface); border-color: var(--smn-border) }` rule (analogous to the text override block). Same treatment likely needed for `bg-slate-50`, `bg-slate-100`, `border-slate-100`, `border-slate-200` so cards keep their border after flip."]}
+      ]
+    },
+    "mobile": {
+      "ui_bugs": [],
+      "integration_issues": [],
+      "design_issues": [
+        {"screen": "App boot / initial paint", "issues": ["On first render after a cold load with prefers-color-scheme:dark, the Hub can briefly flash LIGHT before useColorScheme() reports 'dark' and the tree re-renders. Not a WCAG issue and it resolves within one paint cycle; consider seeding the theme from Appearance.getColorScheme() synchronously in a top-level module so the first paint is already dark."]}
+      ],
+      "react_native_issues": []
+    }
+  },
+  "parity_issues": [
+    {"flow": "Dark-mode readability on content cards", "platform": "web", "issue": "Web has hard-coded bg-white cards that mobile does not have (mobile uses colors.surface via theme). Web dark cards look illegible; mobile cards look correct.", "expected": "Both surfaces flip card backgrounds together with text so dark-mode text stays readable.", "actual": "Web keeps white cards while lightening text; mobile flips both."}
+  ],
+  "test_report_links": [],
+  "action_items": [
+    "HIGH: Migrate remaining hard-coded `bg-white` on card wrappers (Boat Pro detail card, review cards) to `.smn-card` (or add a global `html.dark .bg-white { background: var(--smn-surface); }` rule alongside the text override block in /app/frontend/src/index.css). Verify /directory/[id] and any surface that still uses `bg-white rounded-... border-slate-100`.",
+    "HIGH: Fix top-nav 'Sign in' button on landing — the pattern `bg-white text-[#1F3F5B]` is used inside the nav; in dark mode the text has been remapped to near-white by html.dark overrides while the button bg stays white. Either give the button a dark-mode variant (`dark:bg-slate-800 dark:text-white`) or drop the text-[#1F3F5B] override there so it can inherit brand color from the button token.",
+    "MEDIUM: Sweep for other drifted bg utilities on cards/panels (`bg-slate-50`, `bg-slate-100`, `bg-white/85` used by the mobile-style header on /directory/*) and add `html.dark` overrides in the same block that already remaps text colors.",
+    "LOW: Reduce first-paint theme flash on mobile by initializing the theme from Appearance.getColorScheme() at module load rather than only via useColorScheme()."
+  ],
+  "critical_code_review_comments": [
+    "The text-only dark-mode fix in /app/frontend/src/index.css is elegant (single override block scoped to html.dark) but incomplete — it lightens foreground without flipping backgrounds. Any legacy `bg-white` card that previously had dark text on white now has light text on white and becomes unusable. The safest one-line remedy is a companion `html.dark .bg-white, html.dark .bg-slate-50, html.dark .bg-slate-100 { background: var(--smn-surface); border-color: var(--smn-border); }` block right after the text overrides. Test coverage should include a `getComputedStyle` contrast check across ALL visible text nodes on a couple of dense pages, not only elements that carry the well-known slate utilities."
+  ],
+  "updated_files": [],
+  "success_rate": {"frontend": "70%"},
+  "test_credentials": "seed_marina Bearer token minted via mongosh — sample listed in /app/memory/test_credentials.md; token expires in 7 days.",
+  "seed_data_creation": "Minted ephemeral session tokens for seed_marina (pro.marina@sailmorenow.dev) for mobile auth. No app data was created or modified.",
+  "retest_needed": true,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "The text-only html.dark overrides in /app/frontend/src/index.css correctly remap slate-500/600/700/900, [#1F3F5B], [#475569], [#152a3d], [#64748B] and hover: variants — all measured >4.5:1 on typical dark surfaces (verified via document.querySelectorAll + getComputedStyle across /, /directory/seed_rigging, /community-hub, /events, /pricing, /register at 1280x900). BUT cards/nav that hard-code `bg-white` were not flipped, so previously dark text has been made near-white on white — regression. Repro (web): set localStorage['smn-theme']='dark' then load /directory/seed_rigging; the main pro card + review cards below are illegible. Also / has a `bg-white text-[#1F3F5B]` 'Sign in' button in the nav with invisible label. Mobile is fine — dark theme (colors.surfaceSecondary=#0B1220, colors.surface=#1B2740) applies to Profile/Events/Messages/Boat Pros; active tab icon is teal (tabActive #66C6BF); light mode still works. Minor first-paint flash on mobile as noted. When retesting the web fix, sample .bg-white nodes' background + inner text color and confirm computed contrast >=4.5:1 in html.dark.",
+  "rca of the issue": "Root cause of the still-broken web dark-mode pages: the fix in index.css only overrides FOREGROUND text utilities inside `html.dark`. Backgrounds that were hard-coded with Tailwind class `bg-white` (e.g. /app/frontend/src/pages Boat Pro detail card and review cards; landing 'Sign in' button) were never remapped, so they remain #FFFFFF in dark mode while the text inside them has been remapped to var(--smn-heading)/var(--smn-text) (near-white). The result is near-white text on white background (contrast ~1.07:1), i.e., invisible content. Mitigation options (any one is sufficient): (a) add a mirror override block `html.dark .bg-white, .bg-slate-50, .bg-slate-100 { background: var(--smn-surface); border-color: var(--smn-border); }` after the text block; (b) refactor the affected wrappers to use the existing `.smn-card` helper which already flips via --smn-surface; (c) add explicit `dark:bg-slate-800 dark:border-slate-700` to each offending element. Option (a) matches the existing 'central override' philosophy used for text and avoids touching individual components."
+}

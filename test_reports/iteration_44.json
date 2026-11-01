@@ -1,0 +1,47 @@
+{
+  "summary": "Iter44 / Phase T full-stack verification. Backend: 18/18 pytest cases pass (/api/boat-pros/mine auth+404+photos array, PATCH /api/boat-pros/photos persist/dedupe/cap-6/400KB-reject/403/401/clear, /api/handle/available taken+suggestions+handle_enum_log write, free/invalid no-log, 30/60s rate limit, admin contact reply with template body incl. 401/403 guards). Frontend: ProPhotosUploader renders in Profile for boat_pro with 6 slots + file input and a real upload + delete round-trip persists via PATCH; Onboarding name-derived autofill chip row and taken-handle suggestion pills both render and populate the handle input; /@captainjane alias route renders HandleProfile (Captain Jane / @captainjane), /notarealroute redirects to /, /u/:handle still works; AdminContact reply template <select> populates the textarea and POST .../reply returns 200 with 'Reply sent.' toast. No blocking issues found.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "GET /api/handle/available", "issue": "Spec value 'zz_no_such_handle_xxx' is 21 chars so it returns reason:'invalid' (not ok:true) — the 3-20 char regex is working as designed; test adjusted to a 20-char free handle and a separate 21-char invalid case. No code change needed."},
+      {"endpoint": "POST /api/admin/contact/{id}/reply", "issue": "Response 'ok' mirrors email-delivery success, so a mailer outage returns ok:false with HTTP 200 even though the reply was persisted. Frontend keys its toast off ok — consider separating persistence vs delivery status."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [
+      {"flow": "Onboarding handle autofill", "issue": "The autofill useEffect fires up to 4 sequential GET /api/handle/available calls on mount; combined with the 30-req/60s per-IP throttle, users behind shared NAT (or a user re-typing) can hit 429 and silently lose availability feedback (catch block swallows the error, no user-visible state).", "affected_selectors": ["[data-testid=\"handle-autofill\"]", "[data-testid=\"handle-availability-checking\"]"]}
+    ],
+    "design_issues": [
+      {"screen": "AdminContact reply composer", "issues": ["Template picker uses a native browser <select> rather than the shadcn Select used elsewhere — inconsistent styling", "Select keeps showing 'Pick a template…' after a template is applied (no selected-state feedback)"]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter44_phase_t.py",
+    "/app/backend/tests/seed_iter44_ui.js",
+    "/app/test_reports/pytest/iter44_phase_t.xml",
+    "/app/test_reports/pytest/iter44_handle.xml"
+  ],
+  "action_items": [
+    "Optional: debounce/limit the Onboarding autofill availability probes (or surface a 'try again' state on 429) to avoid silently swallowing rate-limit errors.",
+    "Optional: return persistence success separately from email delivery in POST /api/admin/contact/{id}/reply.",
+    "Optional: replace the native template <select> in AdminContact with the shadcn Select for visual consistency."
+  ],
+  "critical_code_review_comments": [
+    "directory_router.py: `from typing import List` import blocker is resolved; GET /boat-pros/mine is correctly declared before /boat-pros/{pro_id} so the literal path is not shadowed.",
+    "App.js HandleAtAlias correctly guards on the leading '@' and Navigate-redirects everything else, but the catch-all now sits behind a dynamic segment — any new top-level static route must be registered ABOVE /:atHandle or it will be swallowed.",
+    "ProPhotosUploader silently drops files >400KB after showing a toast but still saves the rest; acceptable, though the file input is not cleared when every file is rejected (save() is still called with the unchanged array).",
+    "All new endpoints exclude _id and derive identity from the session token (no user_id in the URL) — good."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter44_phase_t.py",
+    "/app/backend/tests/seed_iter44_ui.js"
+  ],
+  "success_rate": {"backend": "100% (18/18)", "frontend": "100% (all 6 requested flows)"},
+  "seed_data_creation": "Minted temporary mongo sessions for pro.marina@sailmorenow.dev and captain.jane@sailmorenow.dev; created a temporary onboarding user 'Test Sailor' (test.sailor.iter44@sailmorenow.dev, onboarding_complete=false), a TEST_iter44_admin (platform_role=admin) and one TEST contact message. All removed afterwards; seed_marina boat_pros.photos restored to its original 2 Unsplash URLs.",
+  "should_call_test_agent_after_fix": false,
+  "should_main_agent_self_test": true,
+  "test_credentials": "Emergent Google OAuth only — sessions minted directly in mongo per /app/auth_testing.md. Seeded users listed in /app/memory/test_credentials.md (both files present and accurate).",
+  "context_for_next_testing_agent": "Reusable suite at /app/backend/tests/test_iter44_phase_t.py (mints its own sessions via pymongo; run with `-n 0` because the handle rate-limit test bursts 30+ requests and sleeps 61s — total runtime ~70s). Mongo session-mint helper for UI runs: /app/backend/tests/seed_iter44_ui.js. Remember /api/handle/available is throttled 30/60s per IP and the preview ingress shares one egress IP, so space out backend + browser handle tests. Boat-pro photo tests mutate db.boat_pros for seed_marina and restore via a class fixture.",
+  "rca_of_the_issue": "No defect reproduced. The only spec mismatch (zz_no_such_handle_xxx returning invalid instead of ok:true) is caused by the handle regex cap of 20 characters — the requested probe string is 21 characters long, so the endpoint short-circuits to reason:'invalid' before any DB lookup, which is correct behaviour."
+}

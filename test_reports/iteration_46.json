@@ -1,0 +1,35 @@
+{
+  "summary": "Iter46 retest of the 3 iter45 defects — ALL FIXED. Backend: new /app/backend/tests/test_iter46_polish_retest.py = 7/7 PASS. The reply endpoint's delivered/ok now mirror the send_email RETURN value: with mailer.send_email patched to {'status':'error',http:500}, {'status':'skipped','reason':'no_key'} and a raising mock, the handler returns HTTP-200-equivalent payload {persisted:true, delivered:false, ok:false}, the reply row on contact_messages has delivered:false and status='replied'; patched to {'status':'ok'} → delivered:true. HTTP guards still hold (401 no auth, 403 non-admin, 404 unknown msg_id, 400 short body <5, 400 body >6000, happy path 200 with full {ok,persisted,delivered,reply} contract + mongo persistence). Frontend: (1) AdminContact amber data-testid='reply-retry-badge-<id>' renders 'Saved · email retry pending' (bg-amber-100/text-amber-800) on the delivered:false seeded reply only; real send toasts 'Reply sent & delivered.'; with the POST /reply response stubbed to persisted:true/delivered:false the toast reads exactly \"Saved — email delivery failed. We'll retry.\". (2) ProPhotosUploader — the exact iter45 killer (4000x3000 noisy PNG, 35 MB) now compresses to a 373,420-char PATCH payload, server returns 200 and the thumbnail renders (slot index 2, first free slot after the 2 seeded Unsplash photos) — NO 400 rejection. (3) Regression: 2000x1500 noisy PNG compresses, PATCH 200, thumbnail added (4 total). (4) Truly uncompressible input (1600x1600 pure random noise, >1.1M chars even at q=40) now short-circuits: red toast 'pure_noise_1600.png is too detailed to fit under the 400 KB cap — try cropping or a smaller shot' fires immediately and ZERO PATCH requests are made. (5) Non-image .txt → toast \"not_an_image.txt isn't an image — skipped\", no PATCH.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "AdminContact / Profile", "issues": ["Sonner toasts render top-center and overlay the page heading ('Contact queue') and the market chips on /profile — cosmetic only, carried over from iter45"]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter46_polish_retest.py",
+    "/app/backend/tests/make_iter46_images.py",
+    "/app/backend/tests/cleanup_iter46.py",
+    "/app/test_reports/pytest/iter46_retest.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "imageCompress.js now correctly gates on dataUrl.length with an integer quality ladder and returns a best-effort {ok:false} payload — good. Optional hardening: export the 400_000 limit from one shared module so the backend char cap and the client cap can't drift again.",
+    "For genuinely uncompressible photos the client only refuses; consider also stepping the long-edge cap down (1600 → 1200 → 900) before giving up, so noisy camera shots still upload instead of being rejected.",
+    "The amber retry badge / warning toast are still informational only — nothing actually retries the failed email; a background retry job or an admin 'resend' action would close the loop implied by 'We'll retry.'"
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter46_polish_retest.py",
+    "/app/backend/tests/make_iter46_images.py",
+    "/app/backend/tests/cleanup_iter46.py"
+  ],
+  "success_rate": {"backend": "100% (7/7)", "frontend": "100% (5/5 scenarios)"},
+  "seed_data_creation": "Reused seed_iter45_ui.py (admin/onboard/pro sessions, TEST_Iter45 UI contact message with one delivered:false reply) plus in-test TEST_iter46_* admins/messages. All removed via cleanup_iter46.py; boat_pros.seed_marina.photos restored to the original 2 Unsplash URLs (verified).",
+  "should_call_test_agent_after_fix": false,
+  "should_main_agent_self_test": false,
+  "test_credentials": "Emergent Google OAuth only — sessions minted in mongo per /app/auth_testing.md; seeded users listed in /app/memory/test_credentials.md (accurate).",
+  "context_for_next_testing_agent": "Run `cd /app/backend && python -m pytest tests/test_iter46_polish_retest.py -p no:randomly -o addopts='' -v` (~1.4s). The delivery-status matrix calls admin_router.admin_contact_reply in-process with mailer.send_email patched; all 4 scenarios MUST share one asyncio.run (motor binds to the first loop). UI: `python tests/seed_iter45_ui.py` prints tokens/ids, `python tests/cleanup_iter46.py` cleans + restores seed_marina photos. Image fixtures: `python tests/make_iter46_images.py` (4000x3000 and 2000x1500 blurred noise PNGs); /tmp/pure_noise_1600.png (unblurred 1600x1600 noise) is the reliable 'uncompressible' case for the ok:false toast. Note toasts auto-dismiss in ~4s — poll every 500ms instead of a single long wait.",
+  "rca_of_the_issue": "Both iter45 root causes are resolved: (1) admin_contact_reply now derives ok from res.get('status')=='ok' so the error/skipped statuses returned by the never-raising mailer produce delivered=false; (2) imageCompress.js measures the base64 data-URL character count against the same 400,000 limit the API enforces and walks integer qualities [85,75,65,55,45,40], returning {ok:false} best-effort so ProPhotosUploader can toast instead of sending a payload the server would 400."
+}

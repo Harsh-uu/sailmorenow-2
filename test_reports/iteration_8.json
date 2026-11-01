@@ -1,0 +1,30 @@
+{
+  "summary": "Re-test of Phase B after the two HIGH fixes from iteration_7. Extended /app/backend/tests/test_phase_b.py from 23 -> 32 tests (added TestBoatProTierServerDerived: tier escalation attempt, tier mapping free/bogus/featured/premium, 403 for sailor/boat_owner/partner; plus TestEnrichedAuthorCards::test_crew_autopost_has_account_type). Result: 32/32 PASSED. Phase A regression (test_phase_a.py) 21/21 PASSED. Frontend Feed verified via minted mongo session: all 6 posts now render an account-type badge (including both 'Jenn McDonald' crew auto-posts) and Alex Rivera shows the verified icon. Data check on GET /api/posts confirms author_account_type set for all 6 posts and author_verified=true + non-null author_last_active_at for the verified user. No new issues found. All ephemeral test data cleaned up (0 TEST_* users/pros/posts remain); seed_alex.identity_verified=true preserved.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_phase_b.py",
+    "/app/backend/tests/test_phase_a.py",
+    "/app/test_reports/pytest/phase_b_iter8.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "directory_router.upsert_boat_pro now correctly derives tier from user.subscription_tier and 403s non-pros; note the mapping treats 'free' -> 'basic', so a free-plan Boat Pro is indistinguishable from a paying Basic pro in the directory sort/gating — confirm that is the intended product behaviour.",
+    "community_router.list_posts enrichment is now .to_list(None) with a unique index on users.user_id in place; consider projecting only needed fields (already done) and keeping the index creation in the app startup/migration path so it survives a fresh DB.",
+    "Most seeded users still have no last_active_at, so the Feed ActivityDot renders for only one author. Consider setting last_active_at on auth/session touch so the activity signal is meaningful."
+  ],
+  "updated_files": ["/app/backend/tests/test_phase_b.py"],
+  "success_rate": {"backend": "100% (32/32 Phase B, 21/21 Phase A)", "frontend": "100% (6/6 feed posts show enriched author badges)"},
+  "seed_data_creation": "Ephemeral only: TEST_userB_* users/sessions/boat_pros/posts/events (module-fixture teardown) and TEST_fe8_user for the Feed screenshot (deleted). Verified 0 TEST_* docs remain.",
+  "should_call_test_agent_after_fix": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "test_phase_b.py (32 tests) is xdist-safe and covers B.1 credentials/tier gating, B.1b server-derived tier + 403 for non-pros, B.2 account-type swap, B.3 author enrichment incl. crew auto-post, and Phase A spot regression. Both iteration_7 HIGH bugs are confirmed fixed. Stripe checkout and the events aggregator were intentionally not re-run.",
+  "rca_of_the_issue": "N/A - previous defects (to_list(len(ids)) truncation and client-controlled boat_pro tier) verified fixed at community_router.py L55 and directory_router.py L94-103."
+}

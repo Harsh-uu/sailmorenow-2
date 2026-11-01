@@ -1,0 +1,42 @@
+{
+  "summary": "Backend-only retest of the ADMIN_EMAILS dedupe fix in scheduler._monday_admin_report_digest_job (iter28 finding). Ran the job 3x back-to-back against real Mongo with mailer.send_email monkeypatched. RESULT: FIX IS NOT PRESENT — the claimed 'insert-first claim with unique index + DuplicateKeyError guard' does not exist in /app/backend/scheduler.py (lines 308-322 still use update_one(..., upsert=True)) and there is no unique index on admin_email_digests.key. Run 1 emailed jenn@sailmorenow.com and created 1 doc (OK). Run 2 RE-EMAILED jenn@sailmorenow.com and inserted a SECOND duplicate doc for key='admin_email::jenn@sailmorenow.com' (bug reproduced, 100% of 2 runs). Run 3 (after backdating sent_at 9 days) re-emailed once but updated both duplicate docs instead of a single doc. All test-created docs were cleaned up (collection verified empty).",
+  "backend_issues": {
+    "critical": [
+      {
+        "endpoint": "scheduler._monday_admin_report_digest_job (ADMIN_EMAILS branch, scheduler.py:308-322)",
+        "issue": "Dedupe still broken. The claim uses db.admin_email_digests.update_one({key, $or:[{sent_at:null},{sent_at:{$lt:cutoff}}]}, {...}, upsert=True). On a rerun inside the 5-day window the filter matches nothing, so Mongo UPSERTS a brand-new duplicate doc, upserted_id is set, and the guard `if claim.upserted_id is not None` fires -> the admin email is sent again. Observed: run 2 sent to jenn@sailmorenow.com and admin_email_digests held 2 docs with the same key. No unique index on 'key' exists (index_information() = only _id_).",
+        "priority": "CRITICAL"
+      }
+    ],
+    "minor": [
+      {
+        "endpoint": "server.py:_startup ensure-indexes block",
+        "issue": "No create_index for admin_email_digests. If a unique index on 'key' is added later WITHOUT restructuring the claim, the upsert will raise DuplicateKeyError which is swallowed by the function-level try/except at scheduler.py:331 — aborting the whole job AFTER admin users' admin_report_digest_sent_at stamps were already set, so those admins would silently never receive the digest for that week. The per-address claim must be wrapped in its own try/except DuplicateKeyError -> continue."
+      }
+    ]
+  },
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_iter29_admin_digest_dedupe.py",
+    "/app/test_reports/pytest/iter29_results.xml"
+  ],
+  "action_items": [
+    "Implement the dedupe correctly: create a unique index on admin_email_digests.key (in server.py startup), then replace the upsert with (a) insert_one({key, sent_at}) inside try/except DuplicateKeyError -> on duplicate, attempt update_one({key, sent_at:{$lt:cutoff}}, {$set:{sent_at:now}}) and only send when modified_count==1; or (b) keep update_one but drop upsert and do a separate guarded insert. Never rely on upserted_id with a non-unique key.",
+    "Wrap the per-address claim in its own try/except so a DuplicateKeyError cannot abort the remaining recipients of the job.",
+    "Add a one-time cleanup/migration to collapse any pre-existing duplicate admin_email_digests docs before creating the unique index (index creation will fail if duplicates exist in prod).",
+    "Re-run /app/backend/tests/test_iter29_admin_digest_dedupe.py after the fix — all 7 assertions must pass."
+  ],
+  "critical_code_review_comments": [
+    "scheduler.py:312-322 — `upsert=True` combined with a filter that includes the freshness predicate ($or sent_at null/stale) makes the operation non-idempotent by design: a miss always inserts. This is the exact iter28 defect; the comment above it ('so a rerun does not duplicate') is incorrect.",
+    "scheduler.py:331 — a single broad try/except around the entire job means any per-recipient exception silently drops all remaining recipients while the 'claimed' stamps stay set (permanent email loss for that window). Claim-then-send should be per-recipient fault-isolated.",
+    "admin_email_digests has no schema/index enforcement; add unique index on 'key' plus a TTL or periodic purge to stop unbounded growth."
+  ],
+  "updated_files": ["/app/backend/tests/test_iter29_admin_digest_dedupe.py"],
+  "success_rate": {"backend": "43% (3/7 assertions passed)", "frontend": "not tested (backend-only request)"},
+  "seed_data_creation": "None persisted. Test temporarily created admin_email_digests docs for key='admin_email::jenn@sailmorenow.com' and backdated admin users' admin_report_digest_sent_at; all were deleted/restored in a finally block and verified (admin_email_digests is empty).",
+  "should_call_test_agent_after_fix": true,
+  "should_main_agent_self_test": false,
+  "test_credentials": "Not required — job invoked directly, no HTTP auth used.",
+  "context_for_next_testing_agent": "Reuse /app/backend/tests/test_iter29_admin_digest_dedupe.py (module-scoped `state` fixture runs the job 3x with mailer.send_email monkeypatched, snapshots + restores admin_email_digests and admin users' admin_report_digest_sent_at). Note pytest.ini forces xdist loadscope, so keep all assertions in one class to share the fixture. Failing tests: test_run2_does_not_resend, test_run2_does_not_duplicate_doc, test_unique_index_on_key, test_run3_resends_after_cutoff_and_refreshes_same_doc. iter28's composer-width + regex fixes were already confirmed and were not re-tested here.",
+  "rca_of_the_issue": "MongoDB upsert semantics: when the query filter does not match any document, upsert inserts a NEW document built from the filter's equality terms + the update. The claim filter is {key: K, $or:[{sent_at:null},{sent_at:{$lt:cutoff}}]}. On the second run the existing doc has a fresh sent_at, so the filter misses; because 'key' has no unique index, Mongo inserts a second doc with the same key and returns upserted_id != None. The code interprets upserted_id as 'I won the claim' and re-sends the email. Repro: python -m pytest /app/backend/tests/test_iter29_admin_digest_dedupe.py. Mitigation: enforce uniqueness at the DB level and make the claim an insert-first (or non-upsert update) operation so a miss means 'already claimed', not 'insert again'."
+}

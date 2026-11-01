@@ -1,0 +1,33 @@
+{
+  "summary": "Iter 83 — E2E of 3 features (bulk event contact edit, restore-from-alert, follow suggestions) on shared backend + web + mobile.\n\n=== BACKEND ✅ 12/12 pass (/app/backend/tests/test_iter83_bulk_restore_suggestions.py) ===\n  • PATCH /api/admin/events/bulk: updates organizer_name+organizer_email on 2 aggregator events (verified via GET); 400 when no field given; 400 when no ids; 401/403 for non-admin.\n  • POST /api/admin/moderation/restore: unhides the post (visible in GET /api/posts) + dismisses its open reports; admin-only; 400 for invalid target_type.\n  • POST /api/admin/moderation/remove: deletes the post (gone from GET /api/posts) + resolves reports.\n  • GET /api/follows/suggestions?limit=6: correct shape (user_id, is_org, follower_count, partner_badge), excludes self + already-followed, orgs come strictly before non-orgs, 401 without auth.\n\n=== WEB ✅ (jenn admin, 1440x900) ===\n  • /admin/events: 21 select-event-{id} checkboxes present. Selecting 2 opens bulk-bar with bulk-organizer-name + bulk-organizer-email + bulk-apply. PATCH succeeds, selection clears, list refreshes.\n  • NotificationsBell: 8 content_hidden notifs render notif-restore-{id} and notif-remove-{id} pill buttons. Clicking restore shows 'Content restored' toast (Sonner).\n  • /following: follow-suggestions section renders (admin follows 1<5). 6 suggestion-follow-{id} buttons. Clicking follow: user removed from suggestions AND GET /api/follows now returns them as followed. Followed count went 1→2.\n\n=== MOBILE (Expo web preview, 390x844) ✅ ===\n  • /following-list: follow-suggestions renders. 6 suggestion-follow-{id} pill buttons. Tap follows the target, removes it from the list, and it appears in GET /api/follows (count 2→3).\n  • /notifications: 8 content_hidden items render notif-restore-{id} and notif-remove-{id} pill buttons. Tap restore shows 'Content restored' toast. UI layout is clean (see screenshot): row card with flag icon, title, body, timeago, and full-width Restore/Remove pills below.\n\nParity: identical behavior on web + mobile for all three flows (bulk edit is web-only by design). No divergence.",
+  "platforms_tested": ["web", "mobile"],
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "web": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+    "mobile": {"ui_bugs": [], "integration_issues": [], "design_issues": [], "react_native_issues": []}
+  },
+  "parity_issues": [],
+  "test_report_links": [
+    "/app/backend/tests/test_iter83_bulk_restore_suggestions.py",
+    "/app/test_reports/pytest/iter83_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "follows_router.follow_suggestions: sort key `(not is_org, -follower_count, name)` guarantees orgs first — verified in test_suggestions_orgs_first.",
+    "reports_router.moderation_restore: uses $unset on hidden_pending_review / hidden_at / hidden_reason — correctly makes the post appear again in GET /api/posts (which filters hidden_pending_review!=true).",
+    "reports_router.moderation_remove: cascades comment children (comments.delete_many parent_id) — good. For posts+events no children exist so single delete is enough.",
+    "AdminEvents.applyBulk: correctly guards against empty payload client-side (toast.error when both fields blank) BEFORE hitting the API — matches the 400 contract.",
+    "NotificationsBell + mobile notifications: both mark the notif as read after the moderation action (fire-and-forget with .catch), consistent behavior across surfaces.",
+    "EventBulkContact.event_ids default is `[]` and validation returns 400 — good idempotent contract."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter83_bulk_restore_suggestions.py"
+  ],
+  "success_rate": {"backend": "100% (12/12)", "frontend": "web 3/3 flows, mobile 2/2 flows"},
+  "test_credentials": "Admin: jenn@sailmorenow.com / [REDACTED] Mobile via localStorage.session_token (JSON-encoded).",
+  "seed_data_creation": "12 TEST83_* aggregator events had organizer_name/email updated (harmless — admin_edited=true). ~2 posts created + auto-hidden + restored/removed (net zero effect). 2 new follow relationships for jenn (was 1, now 3). Reporter accounts iter83_*@example.com created.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Iter 83 is fully green. Note: admin's follow count has grown to 3 due to testing (was 1) — the follow-suggestions UI still triggers at <5 so tests remain valid. The /api/posts endpoint requires premium subscription (402 upgrade_required) — admin jenn is premium, disposable registered users are FREE and can flag but not post. Use Bearer tokens for cross-account operations; page.context cookies attach only to browser-nav requests, not always to page.request.* in Playwright unless origin matches.",
+  "rca of the issue": ""
+}

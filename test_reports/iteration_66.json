@@ -1,0 +1,27 @@
+{
+  "summary": "RE-RETEST of Crew Bank default-market bug — FIX CONFIRMED. Seeded session for PREMIUM seed_marina (primary_market='Greater Seattle') and opened /crew-bank on the Expo web preview. On fresh navigation and after a full reload, the ACTIVE chip is crew-market-Greater Seattle (bg rgb(31,63,91), active teal) and crew-market-all is inactive. Both sections reflect the Greater Seattle filter (Open shows 'No open crew calls right now.'). Switching to crew-market-all makes it active and surfaces the RCYC - Long Distance Race event, proving the filter is applied to both sections. Premium self-listing controls are present (list-myself-cta + list-myself-btn header, no crew-upsell). No console errors.",
+  "platforms_tested": ["mobile"],
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "mobile": {
+      "ui_bugs": [],
+      "integration_issues": [],
+      "design_issues": [],
+      "react_native_issues": []
+    }
+  },
+  "parity_issues": [],
+  "test_report_links": [],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Fix in /app/mobile/app/crew-bank.tsx L29-31 correctly gates the default-market seed on !authLoading so the user's primary_market is used instead of falling back to 'all'. load() remains gated on market !== null (L39)."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A (skipped)", "frontend": "100%"},
+  "test_credentials": "Minted fresh mobile token for seed_marina (pro.marina@sailmorenow.dev): test_session_mobile_1789101781938 (7-day expiry). Seeded to localStorage.session_token JSON-encoded before navigation.",
+  "seed_data_creation": "One user_sessions row inserted for seed_marina; no other data changed.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Crew Bank default-market bug (iteration_64/65) is fully resolved on mobile. The chip 'crew-market-<primary_market>' is active on first paint and after reload for a user with a primary_market. If retesting, remember: AsyncStorage on web = window.localStorage, key 'session_token' JSON-encoded; wait ~6-8s after nav for AuthContext hydration + the market-seed effect to run before asserting active chip.",
+  "rca of the issue": "Previous bug: seed effect ran while AuthContext was still hydrating (user was null) and locked market to 'all'. Fix destructures loading from useAuth and only seeds once auth resolves: useEffect(() => { if (market === null && !authLoading) setMarket(user?.primary_market || 'all'); }, [user, authLoading, market]). Verified visually — active chip is Greater Seattle on fresh nav and reload."
+}

@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="4" skipped="0" tests="7" time="1.429" timestamp="2026-08-21T18:39:07.329580+00:00" hostname="agent-env-3656a565-2060-4cab-99f1-f3d7a488fa74"><testcase classname="tests.test_iter29_admin_digest_dedupe.TestAdminEmailDigestDedupe" name="test_admin_email_configured" time="0.395" /><testcase classname="tests.test_iter29_admin_digest_dedupe.TestAdminEmailDigestDedupe" name="test_run1_sends_once_and_creates_one_doc" time="0.000" /><testcase classname="tests.test_iter29_admin_digest_dedupe.TestAdminEmailDigestDedupe" name="test_run2_does_not_resend" time="0.000"><failure message="AssertionError: ['jenn@sailmorenow.com']&#10;assert 'jenn@sailmorenow.com' not in ['jenn@sailmorenow.com']">self = &lt;test_iter29_admin_digest_dedupe.TestAdminEmailDigestDedupe object at 0xfbba25d49d50&gt;
+state = {'pre_docs': [], 'admin_users': [{'user_id': 'user_4b6b1bb144d4', 'email': 'jenn@sailmorenow.com', 'admin_report_diges...:27:25.203996+00:00'}], 'indexes': {'_id_': {'v': 2, 'key': [('_id', 1)]}}, 'run1_sent': ['jenn@sailmorenow.com'], ...}
+
+    def test_run2_does_not_resend(self, state):
+&gt;       assert ADMIN_EMAIL not in state["run2_sent"], state["run2_sent"]
+E       AssertionError: ['jenn@sailmorenow.com']
+E       assert 'jenn@sailmorenow.com' not in ['jenn@sailmorenow.com']
+
+tests/test_iter29_admin_digest_dedupe.py:129: AssertionError</failure></testcase><testcase classname="tests.test_iter29_admin_digest_dedupe.TestAdminEmailDigestDedupe" name="test_run2_does_not_duplicate_doc" time="0.000"><failure message="AssertionError: duplicate claim docs after 2nd run: [{'key': 'admin_email::jenn@sailmorenow.com', 'sent_at': '2026-08-21T18:39:08.120681+00:00'}, {'key': 'admin_email::jenn@sailmorenow.com', 'sent_at': '2026-08-21T18:39:08.125427+00:00'}]&#10;assert 2 == 1&#10; +  where 2 = len([{'key': 'admin_email::jenn@sailmorenow.com', 'sent_at': '2026-08-21T18:39:08.120681+00:00'}, {'key': 'admin_email::jenn@sailmorenow.com', 'sent_at': '2026-08-21T18:39:08.125427+00:00'}])">self = &lt;test_iter29_admin_digest_dedupe.TestAdminEmailDigestDedupe object at 0xfbba25d4a390&gt;
+state = {'pre_docs': [], 'admin_users': [{'user_id': 'user_4b6b1bb144d4', 'email': 'jenn@sailmorenow.com', 'admin_report_diges...:27:25.203996+00:00'}], 'indexes': {'_id_': {'v': 2, 'key': [('_id', 1)]}}, 'run1_sent': ['jenn@sailmorenow.com'], ...}
+
+    def test_run2_does_not_duplicate_doc(self, state):
+        docs = state["run2_docs"]
+&gt;       assert len(docs) == 1, f"duplicate claim docs after 2nd run: {docs}"
+E       AssertionError: duplicate claim docs after 2nd run: [{'key': 'admin_email::jenn@sailmorenow.com', 'sent_at': '2026-08-21T18:39:08.120681+00:00'}, {'key': 'admin_email::jenn@sailmorenow.com', 'sent_at': '2026-08-21T18:39:08.125427+00:00'}]
+E       assert 2 == 1
+E        +  where 2 = len([{'key': 'admin_email::jenn@sailmorenow.com', 'sent_at': '2026-08-21T18:39:08.120681+00:00'}, {'key': 'admin_email::jenn@sailmorenow.com', 'sent_at': '2026-08-21T18:39:08.125427+00:00'}])
+
+tests/test_iter29_admin_digest_dedupe.py:133: AssertionError</failure></testcase><testcase classname="tests.test_iter29_admin_digest_dedupe.TestAdminEmailDigestDedupe" name="test_unique_index_on_key" time="0.000"><failure message="AssertionError: no unique index on admin_email_digests.key; indexes={'_id_': {'v': 2, 'key': [('_id', 1)]}}&#10;assert False&#10; +  where False = any(&lt;generator object TestAdminEmailDigestDedupe.test_unique_index_on_key.&lt;locals&gt;.&lt;genexpr&gt; at 0xfbba1d298ba0&gt;)">self = &lt;test_iter29_admin_digest_dedupe.TestAdminEmailDigestDedupe object at 0xfbba25d4a990&gt;
+state = {'pre_docs': [], 'admin_users': [{'user_id': 'user_4b6b1bb144d4', 'email': 'jenn@sailmorenow.com', 'admin_report_diges...:27:25.203996+00:00'}], 'indexes': {'_id_': {'v': 2, 'key': [('_id', 1)]}}, 'run1_sent': ['jenn@sailmorenow.com'], ...}
+
+    def test_unique_index_on_key(self, state):
+        keys = [tuple(v["key"]) for v in state["indexes"].values()]
+        uniq = [k for k, v in state["indexes"].items() if v.get("unique")]
+&gt;       assert any("key" in str(k) for k in uniq), (
+            f"no unique index on admin_email_digests.key; indexes={state['indexes']}")
+E       AssertionError: no unique index on admin_email_digests.key; indexes={'_id_': {'v': 2, 'key': [('_id', 1)]}}
+E       assert False
+E        +  where False = any(&lt;generator object TestAdminEmailDigestDedupe.test_unique_index_on_key.&lt;locals&gt;.&lt;genexpr&gt; at 0xfbba1d298ba0&gt;)
+
+tests/test_iter29_admin_digest_dedupe.py:138: AssertionError</failure></testcase><testcase classname="tests.test_iter29_admin_digest_dedupe.TestAdminEmailDigestDedupe" name="test_run3_resends_after_cutoff_and_refreshes_same_doc" time="0.000"><failure message="AssertionError: expected 1 refreshed doc, got [{'key': 'admin_email::jenn@sailmorenow.com', 'sent_at': '2026-08-12T18:39:08.128696+00:00'}, {'key': 'admin_email::jenn@sailmorenow.com', 'sent_at': '2026-08-12T18:39:08.128696+00:00'}]&#10;assert 2 == 1&#10; +  where 2 = len([{'key': 'admin_email::jenn@sailmorenow.com', 'sent_at': '2026-08-12T18:39:08.128696+00:00'}, {'key': 'admin_email::jenn@sailmorenow.com', 'sent_at': '2026-08-12T18:39:08.128696+00:00'}])">self = &lt;test_iter29_admin_digest_dedupe.TestAdminEmailDigestDedupe object at 0xfbba25d4af90&gt;
+state = {'pre_docs': [], 'admin_users': [{'user_id': 'user_4b6b1bb144d4', 'email': 'jenn@sailmorenow.com', 'admin_report_diges...:27:25.203996+00:00'}], 'indexes': {'_id_': {'v': 2, 'key': [('_id', 1)]}}, 'run1_sent': ['jenn@sailmorenow.com'], ...}
+
+    def test_run3_resends_after_cutoff_and_refreshes_same_doc(self, state):
+        assert state["run3_sent"].count(ADMIN_EMAIL) == 1, state["run3_sent"]
+        docs = state["run3_docs"]
+&gt;       assert len(docs) == 1, f"expected 1 refreshed doc, got {docs}"
+E       AssertionError: expected 1 refreshed doc, got [{'key': 'admin_email::jenn@sailmorenow.com', 'sent_at': '2026-08-12T18:39:08.128696+00:00'}, {'key': 'admin_email::jenn@sailmorenow.com', 'sent_at': '2026-08-12T18:39:08.128696+00:00'}]
+E       assert 2 == 1
+E        +  where 2 = len([{'key': 'admin_email::jenn@sailmorenow.com', 'sent_at': '2026-08-12T18:39:08.128696+00:00'}, {'key': 'admin_email::jenn@sailmorenow.com', 'sent_at': '2026-08-12T18:39:08.128696+00:00'}])
+
+tests/test_iter29_admin_digest_dedupe.py:144: AssertionError</failure></testcase><testcase classname="tests.test_iter29_admin_digest_dedupe.TestAdminEmailDigestDedupe" name="test_cleanup" time="0.004" /></testsuite></testsuites>

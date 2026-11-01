@@ -1,0 +1,44 @@
+{
+  "summary": "Iteration 35 (Phase O) full-stack test. Backend: 21 pytest tests in /app/backend/tests/test_iter35_phase_o.py all pass — GET /api/users/search (handle+name prefix, handle echoed, @-strip, case-insensitive), PATCH /api/auth/handle (401/400 x6/409 case-insensitive/200 lowercased+persisted/idempotent), startup handle backfill verified by seeding 2 handle-less users named identically then restarting the backend (both got unique handles backfillbravo/backfillbravo2), users.handle unique+sparse index confirmed via index_information and a DuplicateKeyError on direct insert, 0 users missing a handle in Mongo, strict @handle mentions (exact handle notifies once; '@qapartial' partial pings nobody; '@Alex' with two alex* named users pings nobody; case-insensitive match works; self-mention skipped), GET /api/searches/suggestions returns 8-bucket ascending weekly trend summing to the seeded count in the correct slots. Frontend: /contact renders with all testids (hero mailto:info@sailmorenow.com, 3 cards, /directory CTA), footer email is now a <Link to='/contact'> and navigates correctly, /profile 'Your @-handle' section prefilled + save persists across reload with success toast, /feed trending chip renders an SVG sparkline (polyline present) and chip click filters posts, and the @mention autocomplete inserts the handle and PostComments renders the strict @handle as a highlighted mention.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "Profile / HandleEditor", "issue": "Client-side validation error (data-testid='handle-error') is unreachable: save() is the only place that sets it, but the Save button is disabled whenever the handle is invalid. Typing an invalid handle (e.g. 'ab') silently disables Save with no message. Recommend rendering the validation hint on change (or enabling the button and letting save() surface the error).", "selector": "[data-testid=\"handle-error\"]", "priority": "MEDIUM"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Profile handle editor", "issues": ["After a successful handle change the AuthContext user is not refreshed — the header/other views keep the old handle until a page reload (value only visibly persists after refresh)."]},
+      {"screen": "Feed trending chip", "issues": ["Sparkline uses the teal accent (#55B3AD); on the ACTIVE chip state the chip background is also teal, so the line has low contrast when the chip is selected. Consider white/dark stroke for the active chip."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter35_phase_o.py",
+    "/app/backend/tests/seed_iter35_ui.py",
+    "/app/test_reports/pytest/iter35.xml"
+  ],
+  "action_items": [
+    "Profile HandleEditor: show handle-error on invalid input (currently unreachable because Save is disabled) — the spec expects both the error and the disabled button.",
+    "Optionally refresh AuthContext user after PATCH /auth/handle so the new handle appears without a reload.",
+    "Optional: give comment items / rendered mentions data-testid attributes (PostComments has none) to make mention-rendering assertions robust."
+  ],
+  "critical_code_review_comments": [
+    "admin_router.search_suggestions buckets by raw ISO string comparison (ws.isoformat() <= ts < we.isoformat()); this only works because created_at is written as UTC '+00:00' ISO. A saved_search created_at with a different offset or a naive string would land in the wrong bucket or be dropped. Consider parsing to datetime before bucketing.",
+    "Trend windows are offset by one day (now - ((i+1)*7 - 1) days), so 'week_start' labels are not real calendar week starts — buckets are contiguous 7-day windows ending now. Fine for a sparkline, but the field name is misleading.",
+    "auth_router._generate_unique_handle does up to 998 sequential find_one round trips in the worst case; acceptable now but consider a single regex query on the base prefix.",
+    "PATCH /auth/handle takes a raw Dict[str, Any] body instead of a Pydantic model — inconsistent with the rest of the router and skips schema validation/OpenAPI docs.",
+    "community_router mention lookup is O(tokens) find_one calls (capped at 10) — fine, but a single {'handle': {'$in': tokens}} query would be cleaner."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter35_phase_o.py (new)",
+    "/app/backend/tests/seed_iter35_ui.py (new)"
+  ],
+  "success_rate": {"backend": "100% (21/21)", "frontend": "100% of the 4 Phase-O flows verified; 1 medium UX defect in HandleEditor validation"},
+  "seed_data_creation": "seed_iter35_ui.py created 1 signed-in test user (handle) + 3 users with 'spinnaker trim' saved searches spanning 3 weeks + 1 post; all cleaned up afterwards (python seed_iter35_ui.py to re-seed, --clean to remove). pytest seed data is auto-cleaned by module fixture.",
+  "should_call_test_agent_after_fix": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "IMPORTANT: run tests/test_iter35_phase_o.py with `-n 0`. Its TestBackfillAndIndex::test_backfill_on_restart restarts the backend via supervisorctl; under the default pytest.ini `-n 2` the other xdist worker gets 502s (5 spurious failures). db.users now has a unique+sparse index on handle — direct Mongo inserts must give a unique handle or omit the field. Verified 0 users missing handle. Frontend testids for Phase O: contact-page, contact-hero-email, contact-card-{email,region,hours}, contact-directory-cta, footer-contact-email/region, profile-handle-section, handle-editor/input/save/error, trending-{i}, trending-spark-{i}, trending-clear.",
+  "rca_of_the_issue": "Only defect found: HandleEditor sets `err` exclusively inside save(), while the Save button's disabled condition includes `!valid` — so the client-side validation branch can never execute and data-testid='handle-error' only ever renders for server errors (400/409). Fix: derive the error message from `valid` during render, or drop `!valid` from the disabled condition."
+}

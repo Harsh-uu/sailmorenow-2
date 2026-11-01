@@ -1,0 +1,45 @@
+{
+  "summary": "Iter52 focused test of event location pins + security hardening. BACKEND (new suite /app/backend/tests/test_iter52_event_pins_security.py = 16/16 PASS): POST /api/events as partner with lat=47.68/lng=-122.4 stores and returns lat/lng and they round-trip through GET /api/events; lat=999 -> 422 and lng=-500 -> 422 (Pydantic ge/le on EventCreate); event posted without a pin has lat/lng = null in both the create response and the list; anon POST /api/events -> 401. GET /api/events (anon and member) contains no organizer_email / email_recipients / _id keys (projection in list_events); GET /api/admin/events (admin) still returns organizer_email for a partner-created event ('partner.psss@sailmorenow.dev'). GET /api/users/search?q=a anon -> 401, member (crew.alex) -> 200 list. POST /api/seed -> 200 {seeded:false}. POST /api/admin/events/send-reminders and /review-alert: member 403, anon 401/403, admin 200 with JSON counts. Push prefs verified via curl: GET /api/push/preferences includes 'event_reminder' in kinds+preferences, PATCH toggles it false and it persists on re-GET (restored to true afterwards). FRONTEND (partner cookie session): /events -> new-event-btn opens new-event-form with a working Leaflet location-picker (1 container, tiles loaded); clicking the map sets location-picker-status to 'Pinned at 47.30158, -122.59644 - drag to adjust' and adds exactly 1 marker; location-picker-clear resets status text and removes the marker; re-pin works; submitting title/market/start/desc + pin shows 'Event submitted' toast and the event appears in events-list. /events?view=map: 5 markers render, our pinned event has its own venue pin whose popup is map-venue-<id>, clicking map-event-<id> opens event-detail-modal containing event-directions -> https://www.google.com/maps?q=47.45038,-122.26685; the market cluster popup map-popup-Portland/Vancouver also renders and its map-event-<id> opens the modal; view-list returns to the list. add-to-calendar-<id> opens the dropdown with gcal-<id> (href starts https://calendar.google.com/calendar/render?action=TEMPLATE) and ics-<id>. Deep link /events?category=racing&date=2026-09-25 pre-filters correctly: cat-racing chip active, events-count = '1 event on September 25, 2026', the Puget Sound Spring Regatta row is shown, copy-events-link present. /admin/events as admin still shows the Organizer line and category-select-<id> (value 'cruising'). Layout regression: /events list AND map have zero horizontal overflow at 390 / 768 / 1024 / 1920 - the two HIGH overflow defects from iter51 are fixed. ONE REAL BUG FOUND: the ?event=<id> deep link never opens the detail modal (see rca).",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "GET /api/admin/events", "issue": "Projection omits lat/lng, so the admin events console cannot see/verify whether an event has a venue pin. Cosmetic/low, but add lat:1,lng:1 if admins should audit pins."},
+      {"endpoint": "POST /api/admin/events/send-reminders", "issue": "Dead unreachable code after the return in community_router.py (3 leftover lines that delete past events + run_aggregator). Harmless today but a copy/paste hazard - delete it."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [
+      {"flow": "?event=<id> deep link on /events", "issue": "Opening https://<app>/events?event=<id> (or reloading the URL produced by 'Share this view' while a modal is open) never opens event-detail-modal - the param is stripped from the URL on mount and the modal stays closed. Reproduced 3/3 times for a community event and an aggregator event.", "affected_selectors": ["[data-testid=\"event-detail-modal\"]", "[data-testid=\"copy-events-link\"]"]}
+    ],
+    "design_issues": [
+      {"screen": "/events list rows", "issues": ["Still 4 rows titled 'Book online' from the OWSA feed (carry-over data-quality noise reported in iter51)."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter52_event_pins_security.py",
+    "/app/backend/tests/cleanup_iter52.py",
+    "/app/test_reports/pytest/iter52_results.xml"
+  ],
+  "action_items": [
+    "Fix the ?event=<id> deep link in Events.jsx: the URL-sync effect runs on mount with active=null and immediately replaces the query string (dropping event=<id>) before /api/events resolves, so the consumer effect (which reads params.get('event') on [events]) sees an empty param. Capture the incoming event id once in a ref/state (e.g. const [pendingEvent] = useState(() => params.get('event'))) and match against it when events arrive, or skip the URL-sync effect on first render.",
+    "Optional: remove the dead code after the return in admin_events_send_reminders (community_router.py ~line 871).",
+    "Optional: include lat/lng in the GET /api/admin/events projection so admins can see pinned venues."
+  ],
+  "critical_code_review_comments": [
+    "Events.jsx has two effects fighting over the same query string: the writer (deps category/day/scope/active/market/view) and the reader (deps [events]). The writer wins on mount, which is exactly the ?event= bug; any future param added to the writer will break its own deep link the same way.",
+    "LocationPicker/EventMap correctly use vanilla Leaflet and clean up on unmount, and EventMap escapes popup HTML (esc()) before injecting titles/locations - the JSON payload is also URI-encoded, so no injection found there.",
+    "list_events projection is the single place hiding organizer_email/email_recipients. Any new read path over db.events (digest render, /events/{id}, aggregator debug endpoints) must repeat the projection - consider a shared PUBLIC_EVENT_PROJECTION constant to prevent regressions."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter52_event_pins_security.py",
+    "/app/backend/tests/cleanup_iter52.py"
+  ],
+  "success_rate": {"backend": "100% (16/16)", "frontend": "92% - all pin/map/calendar/deep-filter/admin flows pass; ?event= deep link broken"},
+  "seed_data_creation": "Re-ran /app/backend/tests/seed_iter51_ui.py (tokens test_iter51_admin_token for jenn@sailmorenow.com, test_iter51_partner_token for partner.psss). Pytest also mints test_iter52_member_token for crew.alex and deletes it in teardown. One UI-created event 'TEST_iter52 Pin Party' was deleted via /app/backend/tests/cleanup_iter52.py (0 TEST_ events remain). Partner push preference event_reminder toggled off during testing and restored to true.",
+  "should_call_test_agent_after_fix": false,
+  "should_main_agent_self_test": true,
+  "test_credentials": "Cookie/Bearer session_token=test_iter51_partner_token (partner.psss@sailmorenow.dev) and test_iter51_admin_token (admin jenn@sailmorenow.com); re-mint with `python /app/backend/tests/seed_iter51_ui.py`. Cookie domain nw-sailing-community.preview.emergentagent.com, secure, sameSite=None.",
+  "context_for_next_testing_agent": "Regression commands: `cd /app/backend && python -m pytest tests/test_iter52_event_pins_security.py tests/test_iter51_events_category.py -q` (pytest.ini forces xdist loadscope, so keep any fixture-shared state inside a single class - the PII class creates its own event). Note EventMap's root div IS the .leaflet-container, so use '[data-testid=\"event-map\"] .leaflet-marker-icon' not '... .leaflet-container'. Current data: 23 upcoming events, Greater Seattle cluster pin shows 2, Portland/Vancouver 18. Only the ?event= deep link remains broken; retest that specific URL after the fix plus 'Share this view' round-trip.",
+  "rca_of_the_issue": "?event=<id> deep link: Events.jsx mounts with active=null, and the URL-sync effect (deps [category, day, scope, active, market, view]) builds `next` from state only. On first render that yields an empty query string, which differs from 'event=<id>', so setParams(next, {replace:true}) immediately erases the param. The consumer effect that would open the modal only runs when `events` arrives (a later tick) and re-reads params.get('event'), which is now null -> modal never opens. Verified by loading /events?event=<id> twice (modal count 0, URL rewritten to /events) and by copying the app's own share URL while a modal was open and reloading it (modal count 0)."
+}

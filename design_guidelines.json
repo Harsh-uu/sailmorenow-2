@@ -1,0 +1,60 @@
+{
+  "typography": {
+    "headings": "Poppins, ui-sans-serif, system-ui, sans-serif. Use for all display and H1-H4 headings. Must use tight letter spacing (tracking-tight) for large headers.",
+    "body": "system-ui, sans-serif. Default to text-base for standard readability.",
+    "eyebrow_labels": "Teal-caps eyebrow labels above each H2. Implementation: `<span className=\"uppercase text-smn-teal font-bold tracking-widest text-sm mb-2 block\">Eyebrow Text</span>`"
+  },
+  "colors": {
+    "palette": {
+      "navy": "#1F3F5B",
+      "teal": "#55B3AD",
+      "sun": "#F2A03B"
+    },
+    "dark_mode_strategy": {
+      "strategy": "Tailwind dark mode via class toggle (e.g. `dark:` modifier on `<html>`). Provide a theme toggle button in the Header next to auth buttons.",
+      "hero_section": "Light Mode: bg-[#1F3F5B] (navy). Dark Mode: bg-slate-950 (near-black).",
+      "alternating_bands": {
+        "band_A": "Light Mode: bg-slate-50 (#F8FAFC) / Dark Mode: bg-slate-900",
+        "band_B": "Light Mode: bg-white / Dark Mode: bg-slate-800"
+      },
+      "wave_colors": "Waves must use `fill-current` and receive their color via Tailwind `text-` utility matching the NEXT section's background (e.g. `text-slate-50 dark:text-slate-900`).",
+      "text": "Light Mode: text-slate-900 / Dark Mode: text-slate-100"
+    }
+  },
+  "visual_enhancers": {
+    "wave_dividers": "Subtle single-curve dividers between major sections. Use inline SVGs. Example: `<svg viewBox=\"0 0 1440 120\" preserveAspectRatio=\"none\" className=\"w-full h-auto min-h-[40px] max-h-[120px] fill-current\"><path d=\"M0,70 C240,120 480,15 720,60 C960,105 1200,15 1440,60 L1440,120 L0,120 Z\"></path></svg>`. Must scale full-bleed without stretch artifacts.",
+    "round_logo_motif": "In the hero section of the landing page, include the round logo (`/icon-512.png`) as a floating badge or integrated design element. Should reflow/drop on mobile.",
+    "buttons": "Pill-shaped or rounded-md. Primary CTAs use sun/orange (bg-smn-orange), secondary use ghost or teal."
+  },
+  "layouts": {
+    "header": {
+      "behavior": "Sticky. On `/` (Landing page), starts as transparent (bg-transparent) and text-white. On scroll (e.g. > 50px), transitions to solid background (Light: bg-white text-slate-900, Dark: bg-slate-950 text-white). On inner pages, always solid.",
+      "logo": "Use the horizontal logo. Ensure `LOGO_COLOR` is used on light solid headers, and `LOGO_HORIZONTAL_DARK` on dark solid headers or transparent headers over the dark hero."
+    },
+    "section_rhythm": {
+      "landing": "Hero (Navy) -> Wave (inherit Band A) -> Band A (What is SMN) -> Wave (inherit Band B) -> Band B (Features/Grid) -> etc.",
+      "public_pages": "`/pricing`, `/contact`, `/community-hub`, `/@handle`, `/directory` must adopt the same rhythm: start with a dark-navy header/mini-hero block, transition with a wave SVG to off-white body content."
+    }
+  },
+  "responsive_breakpoints": {
+    "mobile": "≤430px. Stack columns, reflow hero. Wave-divider SVGs must scale full-bleed. Round-logo motif can drop.",
+    "tablet": "768px – 1024px. Grid switches to 2 columns where appropriate.",
+    "laptop": "≥1280px. 3-column feature grids, full-sized wave dividers."
+  },
+  "accessibility": {
+    "contrast": "Ensure teal and orange text/buttons have sufficient contrast against off-white and dark slate backgrounds. Use APCA guidelines.",
+    "data_testid": "CRITICAL: All existing `data-testid` attributes on ALL affected pages MUST remain untouched. Do not remove `login-btn`, `nav-boat pros`, `pricing-page`, `stripe-mode-banner`, `checkout-btn`, `contact-form`, `handle-profile-page`, `brand-logo`, etc."
+  },
+  "instructions_to_main_agent": [
+    "Identify the 6 public pages (`/`, `/pricing`, `/contact`, `/community-hub`, `/@handle`, `/directory`) and apply the marketing rhythm.",
+    "Do NOT touch authenticated app pages (`/dashboard`, `/messages`, `/feed`, `/events`, `/crew-bank`, `/profile`, `/reviews`, `/admin/*`).",
+    "Update Header.jsx to handle route-based and scroll-based transparency.",
+    "Implement dark mode toggle in the Header. Apply Tailwind dark mode classes (`dark:bg-slate-900`, etc.) to the 6 target pages.",
+    "Add inline SVG wave dividers at section transitions. The wave SVG should wrap in a block like `<div className=\"w-full overflow-hidden leading-none ...\">` to prevent baseline gaps.",
+    "Preserve Poppins font for headings and system-ui for body.",
+    "Use existing CSS variables or extend them in index.css as necessary.",
+    "Never replace `LOGO_HORIZONTAL` or `LOGO_COLOR` image references with just text.",
+    "Ensure test-ids are meticulously preserved across refactors."
+  ],
+  "UNIVERSAL GUIDELINES FOR MAIN AGENT": "Do not remove functionality to achieve design. Add subtle entry animations for sections using Framer Motion or simple CSS transitions. Make sure to avoid absolute centering of main containers; left-align content where reading flow demands it. Keep component abstractions modular and reusable. Add transitions to interactive elements except transforms."
+}

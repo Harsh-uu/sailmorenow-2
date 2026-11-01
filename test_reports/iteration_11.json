@@ -1,0 +1,49 @@
+{
+  "summary": "Phase E tested end-to-end. New suite /app/backend/tests/test_phase_e.py = 27/27 passing (threaded post comments CRUD + validation + notifications, and scheduler._nightly_job 24h review-reminder path incl. idempotency). Phase A/B/C/D regression re-run: 132/132 passing. Frontend verified on the public preview URL: Feed allow_comments checkbox + threaded comments panel (create/reply/indent/delete/cascade/comments-off), CrewBankModal portal wrapper (mounted at document.body, Escape/backdrop/close, content click safe, join flow), and mobile hamburger drawer at 390x844. ONE CRITICAL UI defect found: the mobile drawer's `fixed inset-0` is clipped to the 64px header box because the <header> uses backdrop-blur-xl (backdrop-filter creates a containing block) — backdrop is 390x64, drawer 288x64, so backdrop-click-to-close does not work below the header and drawer links overlap/tap-through page content.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "GET /api/posts/{id}/comments", "issue": "Returns 200 [] for a non-existent post id (no existence check). Harmless but inconsistent with POST which 404s; also unauthenticated read of comments on any post is allowed by design."},
+      {"endpoint": "DELETE /api/comments/{id}", "issue": "Cascade is one level only (delete_many on parent_id == deleted id). Grandchild replies are orphaned and, because PostComments.jsx only renders childrenOf() at depth 0, orphaned depth-2 comments become invisible in the UI while still stored. Matches the documented design, flagging for awareness."},
+      {"endpoint": "POST /api/posts/{id}/comments", "issue": "No rate limiting / no de-dupe: the same body can be posted repeatedly. Also no index on comments.post_id / comments.parent_id — list is a collection scan capped at 500 docs, and >500 comments silently truncates the thread."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "Header mobile drawer", "issue": "CRITICAL: drawer + backdrop are rendered inside <header class='sticky ... backdrop-blur-xl'>. backdrop-filter makes the header a containing block for position:fixed, so `fixed inset-0` resolves to the header box. Measured: mobile-drawer-backdrop = 390x64, mobile-drawer = 288x64 (should be full viewport / inset-y-0). Consequences: (1) backdrop click below y=64 does NOT close the drawer (verified fail), (2) the drawer's nav list and market-selector footer overflow the 64px white panel and float over the page with no white background, (3) document.elementFromPoint at the centre of mobile-nav-reviews returns the underlying page button (filter-volunteer_opportunity), i.e. real taps can hit page content instead of the nav link. Fix: render the drawer with createPortal(document.body) exactly like components/Modal.jsx does, or move the drawer markup outside <header>.", "selector": "[data-testid=\"mobile-drawer\"], [data-testid=\"mobile-drawer-backdrop\"]", "priority": "HIGH"},
+      {"component": "CrewBankModal", "issue": "testid contract change: the close button is now `crewbank-modal-close` (derived from Modal's `${testId}-close`); the requested/legacy `crewbank-close` no longer exists anywhere in the codebase. Either pass a closeTestId or update the spec/tests.", "selector": "[data-testid=\"crewbank-close\"]", "priority": "LOW"},
+      {"component": "PostComments (comments disabled)", "issue": "Redundant duplicate copy for a signed-in user on a comments-off post: 'Comments are turned off on this post.' plus the italic 'The author has turned off new comments.' Show one.", "selector": "[data-testid=\"comments-{postId}\"]", "priority": "LOW"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Mobile drawer (390x844)", "issues": ["Drawer panel white background is only 64px tall (see critical bug); nav links render on top of page content with no surface behind them."]},
+      {"screen": "Feed post card", "issues": ["No comment count on the collapsed toggle until the panel has been opened once (count comes from the lazy load), so 'Show comments' never advertises existing activity — consider returning comment_count with GET /api/posts."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_phase_e.py",
+    "/app/test_reports/pytest/phase_e_iter11.xml",
+    "/app/test_reports/pytest/phase_abcd_iter11.xml",
+    "/app/tests/ui_seed_iter11.py"
+  ],
+  "action_items": [
+    "HIGH: portal the mobile nav drawer to document.body (or move it out of the backdrop-blur-xl <header>) so the backdrop covers the viewport, backdrop click closes, and drawer links are not tap-through.",
+    "LOW: restore/alias the `crewbank-close` testid or update automation to `crewbank-modal-close`.",
+    "LOW: dedupe the two 'comments are off' messages in PostComments.",
+    "OPTIONAL: add mongo indexes on comments.post_id and comments.parent_id; return comment_count in GET /api/posts; paginate beyond the 500-doc cap."
+  ],
+  "critical_code_review_comments": [
+    "community_router.create_comment re-queries the parent comment a second time for the notification (already fetched during validation) — reuse the first lookup.",
+    "scheduler._nightly_job step 5 sets reminder_sent_at with an unconditional update_one; two overlapping runs could both pass the filter and double-send. Prefer a conditional update ({id, reminder_sent_at: {$in:[None,False]}}) BEFORE sending and only email when modified_count==1.",
+    "Verified good: comments exclude _id everywhere, author snapshot fields (name/avatar/account_type) are denormalized at write time, allow_comments=false is enforced server-side (403) not just hidden in the UI, notify de-dupes post-author vs parent-author, delete honours author OR platform_role=admin, and the reminder subject/hours_left are computed from reveal_at with a safe fallback.",
+    "Modal.jsx is a correct portal implementation (body scroll lock restored on unmount, stopPropagation on the card, Escape listener) — the Header drawer should reuse it instead of hand-rolling fixed positioning."
+  ],
+  "updated_files": ["/app/backend/tests/test_phase_e.py", "/app/tests/ui_seed_iter11.py"],
+  "success_rate": {"backend": "100% (27/27 phase E, 132/132 phase A-D regression)", "frontend": "~90% — all comment + CrewBank modal flows pass; mobile drawer geometry/backdrop-close fails"},
+  "seed_data_creation": "Ephemeral only. Backend suite mints TEST_userE_* users/sessions/posts/comments/review-sessions and tears them down in a module fixture. UI testing used /app/tests/ui_seed_iter11.py (2 TEST_uiE_* users, 3 posts, 1 event) and everything was deleted afterwards (verified 0 residual TEST_* users / comments / events). seed_alex.identity_verified=true preserved and asserted.",
+  "should_call_test_agent_after_fix": false,
+  "should_main_agent_self_test": true,
+  "test_credentials": "No app passwords (Emergent Google OAuth). Mint mongo sessions per /app/auth_testing.md; tests use the mint_user helper (platform_role:'admin' is what deps.is_admin checks — there is no is_admin field).",
+  "context_for_next_testing_agent": "test_phase_e.py is xdist-safe (RUN_PREFIX TEST_userE_<worker>_). Key gotchas learned: (1) POST /api/posts requires `type`, not `kind`; (2) admin-ness = users.platform_role=='admin' or email in ADMIN_EMAILS; (3) calling scheduler._nightly_job repeatedly from separate asyncio.run() calls raises 'Event loop is closed' unless you pop scheduler/notifications/mailer/deps/routers.reviews_router from sys.modules before each run so motor rebinds to the new loop (see TestReviewReminder._run_nightly); (4) EMERGENT_EMAIL_KEY is unset so mailer.send_email returns {status:'skipped'} — the reminder loop still runs and reminder_sent_at is still set; the test wraps mailer.send_email to capture calls. UI: cookie session_token on nw-sailing-community.preview.emergentagent.com, browser User-Agent required for API curl. Untested: notification bell rendering of kind='comment', comments at >500 volume, and drawer behaviour after the portal fix.",
+  "rca_of_the_issue": "Mobile drawer: `<header class=\"sticky top-0 z-50 backdrop-blur-xl\">` applies backdrop-filter, which per CSS spec makes the element a containing block for fixed-position descendants. The drawer's `fixed inset-0` therefore resolves to the 64px-tall header box instead of the viewport (measured backdrop 390x64, aside 288x64). Reproduce: 390x844 viewport -> click [data-testid=mobile-menu-btn] -> click at (370,300) -> drawer stays open; bounding_box of the backdrop is 390x64. Mitigation: render the drawer through createPortal(node, document.body) (as components/Modal.jsx already does) or hoist it out of the header element."
+}

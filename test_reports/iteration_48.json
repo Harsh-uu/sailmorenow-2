@@ -1,0 +1,32 @@
+{
+  "summary": "Iter48 retest of the 3 iter47 defects. Backend: NEW pytest file test_iter48_retest.py — 6/6 passed. The lease-based CAS fix in scheduler._contact_reply_retry_job is verified: 2 concurrent runs AND 3 concurrent runs on the same undelivered reply each produced EXACTLY 1 send_email call with retry_count=1, delivered=true, delivered_at + last_retry_at set. On-fail path (mailer 500) keeps delivered=false, retry_count=1, last_retry_at set, and 2 overlapping runs still produce exactly 1 send. Retry matrix regressions (cap-5 skipped, delivered skipped, missing retry_count -> 1 + delivered flip) pass. /api/payments/mode, PATCH /boat-pros/photos 400k cap (+persistence & no _id), GET /boat-pros/mine 401, POST /admin/contact/{id}/reply contract all pass. Frontend: Pricing design fix VERIFIED (stripe-test-hint = 'text-xs text-slate-600 mt-3', copy 'Test mode — no real charges.', exactly ONE '4242 4242 4242 4242' on page). ProPhotosUploader fix is BROKEN/INCOMPLETE — `loadState` is referenced in JSX but never declared, so React throws 'loadState is not defined' and the ENTIRE /profile page renders blank for boat pros (crash, no error boundary). Defect (2) could not be tested and a new P0 regression was introduced.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "ProPhotosUploader.jsx", "issue": "CRITICAL REGRESSION: `loadState` is used at lines 77, 83, 84, 86 but never declared (no useState) and the useEffect was never updated to set it. Runtime ReferenceError 'loadState is not defined' crashes the component; because Profile.jsx has no error boundary, the whole /profile route renders as a blank page for boat_pro users (verified with a minted seed_marina session; pageerror captured). Fix: add `const [loadState, setLoadState] = useState(\"loading\")` and rewrite the useEffect: on success -> setPhotos(data.photos||[]) + setLoadState('ready'); on 404 -> setPhotos([]) + 'ready'; on any other error -> setLoadState('error') WITHOUT clearing photos.", "selector": "[data-testid=\"pro-photos-uploader\"]", "priority": "CRITICAL"}
+    ],
+    "integration_issues": [
+      {"flow": "Boat Pro gallery load (GET /api/boat-pros/mine)", "issue": "Cannot verify the 401 load-error guard: component crashes before render, so data-testid='pro-photos-load-error' never appears and pro-photos-file is absent entirely. Happy path (200 with 2 existing photos) also crashes — thumbnails/upload are completely unavailable.", "affected_selectors": ["[data-testid=\"pro-photos-load-error\"]", "[data-testid=\"pro-photos-file\"]", "[data-testid=\"pro-photos-uploader\"]"]}
+    ],
+    "design_issues": []
+  },
+  "test_report_links": ["/app/backend/tests/test_iter48_retest.py", "/app/backend/tests/seed_iter48_ui.py", "/app/test_reports/pytest/iter48_results.xml"],
+  "action_items": [
+    "P0: Declare loadState in ProPhotosUploader.jsx and update the useEffect (404 -> ready+empty, other errors -> error state, success -> ready). Currently /profile is a blank white screen for boat pros.",
+    "Consider adding an error boundary around Profile.jsx sections so a single component crash doesn't blank the whole route.",
+    "Run `yarn eslint src/components/ProPhotosUploader.jsx` before handing off — no-undef caught this instantly (also 2 react/no-unescaped-entities errors on the apostrophes in the warning copy)."
+  ],
+  "critical_code_review_comments": [
+    "ProPhotosUploader.jsx: JSX references an undeclared identifier — lint (no-undef) fails; this file cannot have been rendered once after the edit.",
+    "scheduler._contact_reply_retry_job: CAS lease logic is correct and verified. Minor note: the outer cursor snapshot still iterates replies read before the claim, so a delivered-in-parallel reply is handled only by the claim filter — acceptable, no double send observed.",
+    "Profile.jsx has no error boundary; any child throw blanks the entire authenticated profile page."
+  ],
+  "updated_files": ["/app/backend/tests/test_iter48_retest.py", "/app/backend/tests/seed_iter48_ui.py"],
+  "success_rate": {"backend": "100%", "frontend": "50%"},
+  "seed_data_creation": "Minted mongo session token 'test_iter48_ui_token' for user seed_marina (boat pro). TEST_iter48_* contact_messages and TEST_iter48_admin user were created and cleaned up by the tests. boat_pros photos for seed_marina restored to original.",
+  "should_call_test_agent_after_fix": true,
+  "should_main_agent_self_test": false,
+  "test_credentials": "/app/memory/test_credentials.md present; Emergent Google OAuth, sessions minted via mongo (see /app/backend/tests/seed_iter48_ui.py).",
+  "context_for_next_testing_agent": "Backend CAS + regressions fully green via `cd /app/backend && python -m pytest tests/test_iter48_retest.py -v`. Note test_iter47_phase_u.py's concurrency sub-case resets retry_count but not last_retry_at, so under the new lease filter it may now report 0 sends — that is a stale-test artifact, not a product bug; prefer test_iter48_retest.py. Only remaining work: ProPhotosUploader loadState (P0 crash). UI session cookie: name 'session_token', value 'test_iter48_ui_token', domain nw-sailing-community.preview.emergentagent.com. Cleanup: db.user_sessions.delete_many({session_token:/^test_iter48/}).",
+  "rca_of_the_issue": "Defect (2) fix was only half-applied: the JSX branches referencing loadState were added, but the corresponding useState declaration and useEffect state transitions were not. React evaluates the component body, hits the undeclared identifier, throws ReferenceError, and with no error boundary React unmounts the whole tree -> blank /profile."
+}

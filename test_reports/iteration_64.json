@@ -1,0 +1,33 @@
+{
+  "summary": "Frontend-only mobile testing for (1) Profile Light/Dark/System appearance toggle and (2) Crew Bank market filter. Appearance toggle works end-to-end: tapping theme-dark instantly repaints Profile AND Hub tabs with the dark palette (#0B1220 app bg, #1B2740 cards, teal-highlighted active segment), 'smn-theme-pref' is persisted to localStorage as 'dark', a full page reload re-hydrates the pref and the app renders dark on load, and theme-light flips everything back to white/#F1F5F9 with pref='light'. Crew Bank market filter is FUNCTIONALLY correct — switching chips filters both 'Open on upcoming events' and 'Sailors available for crew' sections correctly (Portland/Vancouver=1, Greater Seattle=0, Bellingham=0, all markets=1) matching the backend contract — but the DEFAULT-market bootstrap is BROKEN: on /crew-bank the initially active chip is 'All markets' (crew-market-all navy-highlighted) instead of the seeded user's primary market chip 'crew-market-Greater Seattle'. Reproduced both cold-load and after warming the Profile screen first, so it is not a race with an unhydrated AuthContext. Root cause is in /app/mobile/app/crew-bank.tsx:16 — `useState(user?.primary_market || 'all')` captures 'all' when user is not yet hydrated on that mount, and never re-syncs when the user later resolves. Filter-by-chip and the backend endpoints themselves are fine — this is purely the initial-state bootstrap.",
+  "platforms_tested": ["mobile"],
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "mobile": {
+      "ui_bugs": [
+        {"component": "CrewBank market chip", "issue": "Default active market chip is 'All markets' (crew-market-all) instead of the user's primary market ('crew-market-Greater Seattle' for seed_marina). Spec requires defaulting to primary_market on first paint. Filter itself works when chips are tapped.", "testID": "crew-market-Greater Seattle", "priority": "HIGH"}
+      ],
+      "integration_issues": [],
+      "design_issues": [],
+      "react_native_issues": []
+    }
+  },
+  "parity_issues": [],
+  "test_report_links": [],
+  "action_items": [
+    "Fix default market in /app/mobile/app/crew-bank.tsx:16. `const [market, setMarket] = useState<string>(user?.primary_market || 'all')` runs once when user may still be null, so the chip locks to 'all'. Options: (a) initialize lazily/late — `const [market, setMarket] = useState<string | null>(null); useEffect(() => { if (market == null && user?.primary_market) setMarket(user.primary_market); else if (market == null && user) setMarket('all'); }, [user?.primary_market]);` and gate `load()` on `market != null`; or (b) key the screen on `user?.user_id` at the layout level so it remounts once auth resolves. Approach (a) preserves subsequent manual selections."
+  ],
+  "critical_code_review_comments": [
+    "theme.ts external store is elegant — useSyncExternalStore + module-level `_pref` + storage.secureGet hydration on module load correctly makes every consumer re-render on setPref without a Provider. Verified live cross-screen (Profile → Hub) and reload persistence in one pass — no issues.",
+    "The `_notify()` call inside the hydration promise (theme.ts:151) is important; without it a stored 'dark' pref would be applied only to components mounted AFTER hydration. Kept as-is — good.",
+    "crew-bank.tsx should also treat 'user changed / logged in as different user' — the current one-shot initialization means switching accounts wouldn't reset the default market. Same fix as above covers it."
+  ],
+  "updated_files": [],
+  "success_rate": {"frontend": "80% (1 default-state bug; theme + filter behaviour otherwise fully working)"},
+  "test_credentials": "Seeded via mongosh for pro.marina@sailmorenow.dev, token: test_session_mobile_1789101244889 (7d expiry). Primary market: Greater Seattle.",
+  "seed_data_creation": "Inserted one user_sessions row for seed_marina (Premium Boat Pro) so the Crew Bank self-listing CTA is visible.",
+  "retest_needed": true,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Appearance toggle (Light/System/Dark) is fully working — persistence via 'smn-theme-pref' in localStorage, live reactivity across Profile & Hub confirmed. Crew Bank market filter WORKS when user taps chips; only the initial default chip is wrong (locks to 'All markets' instead of primary_market). After fix, retest by loading /crew-bank fresh and confirming crew-market-Greater Seattle is the active (navy-bg) chip AND that 'Open on upcoming events' shows 0 cards on default paint. Backend curls in review request already verified.",
+  "rca of the issue": "In /app/mobile/app/crew-bank.tsx line 16, `useState<string>(user?.primary_market || 'all')` evaluates its initial argument once on the first render. When CrewBank mounts, AuthContext's `user` may still be null (async storage hydrate), so the fallback 'all' becomes the sticky initial state and no effect re-syncs it when `user` later populates. This makes the initial network request `/api/crew-bank/open?market=all` and paints 'All markets' as active. Confirmed by reproducing on a cold /crew-bank load AND after first navigating to /profile (which warms AuthContext) — same 'all' state, indicating even with warm context the initial-arg is captured once. Fix: defer initialization until user is known, e.g. `useState<string|null>(null)` + effect that seeds from `user.primary_market` when it first becomes truthy, and gate `load()` on non-null market."
+}

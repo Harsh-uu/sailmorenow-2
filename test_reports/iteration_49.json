@@ -1,0 +1,26 @@
+{
+  "summary": "Iter49 P0 hotfix retest of ProPhotosUploader. Backend: re-ran tests/test_iter48_retest.py — 6/6 PASSED (CAS retry lease incl. 2x/3x concurrency, retry matrix, /api/payments/mode, PATCH /boat-pros/photos 400k cap + persistence + no _id, GET /boat-pros/mine 401, POST /admin/contact/{id}/reply contract). Frontend: minted seed_marina boat_pro session (test_iter48_ui_token) and exercised all 3 load paths on /profile. (1) Happy 200: pro-photos-uploader renders, ZERO pageerrors (no more 'loadState is not defined'), 2 seeded thumbnails visible, pro-photos-file ENABLED, label 'Add photos'. (2) 401 injected via page.route: pro-photos-load-error visible with exact copy \"Couldn't load your gallery — please refresh before uploading so we don't overwrite it.\", pro-photos-file disabled=true, label styled cursor-not-allowed/bg-slate-200, real-user path fully blocked (label.click() times out, no filechooser event, ZERO PATCH requests). (3) 404 injected: no error banner, no thumbnails, pro-photos-file ENABLED so a first-time pro can upload. No pageerrors in any scenario. P0 regression from iter48 is CONFIRMED FIXED.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": ["/app/backend/tests/test_iter48_retest.py", "/app/backend/tests/seed_iter48_ui.py", "/app/test_reports/pytest/iter49_results.xml"],
+  "action_items": [
+    "LOW: eslint react/no-unescaped-entities errors at ProPhotosUploader.jsx:91 (two raw apostrophes in the load-error copy). Renders fine but `yarn eslint` fails on this file — escape with &apos; / &rsquo;.",
+    "LOW (defense-in-depth, optional): the overwrite guard is client-side only (disabled attribute). Automation that bypasses the disabled input (Playwright set_input_files) still triggers PATCH /boat-pros/photos with a shorter array, replacing the gallery. Real users cannot do this (label click and filechooser are blocked), so no user-facing bug — but the server has no guard against a shrinking photos array. Consider an explicit intent flag or optimistic-concurrency check if this matters."
+  ],
+  "critical_code_review_comments": [
+    "ProPhotosUploader.jsx now correct: loadState declared (line 20), useEffect maps 404 -> ready+empty and other errors -> error without clearing photos, and the disabled expression `photos.length >= 6 || busy || loadState !== 'ready'` covers loading and error states.",
+    "Profile.jsx still has no error boundary — any child throw would again blank the whole authenticated /profile route. Worth adding as a general safety net."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "seed_data_creation": "Reused mongo session token 'test_iter48_ui_token' for seed_marina. During the 401 test one forced upload (Playwright bypass of the disabled input) replaced seed_marina's photos; restored to the original 2 unsplash URLs via `python /app/backend/tests/cleanup_iter47.py` — verified back to 2 photos.",
+  "should_call_test_agent_after_fix": false,
+  "should_main_agent_self_test": true,
+  "test_credentials": "/app/memory/test_credentials.md — Emergent Google OAuth; sessions minted via mongo (tests/seed_iter48_ui.py). Cookie: session_token=test_iter48_ui_token on nw-sailing-community.preview.emergentagent.com.",
+  "context_for_next_testing_agent": "iter49 is fully green: backend 6/6 (tests/test_iter48_retest.py) and all 3 ProPhotosUploader load paths (200/401/404) verified with no pageerrors. Only remaining nits: eslint unescaped apostrophes in ProPhotosUploader.jsx line 91 and the missing error boundary in Profile.jsx. IMPORTANT for future UI tests: do NOT use set_input_files on pro-photos-file when testing the disabled guard — Playwright bypasses `disabled` and will overwrite seed_marina's gallery; use label.click() + filechooser assertion instead, and restore with cleanup_iter47.py if needed. Also note test_iter47_phase_u.py's concurrency sub-case is stale under the new lease filter; prefer test_iter48_retest.py.",
+  "rca_of_the_issue": "iter48's ReferenceError was caused by a half-applied edit (JSX referenced loadState with no useState). The iter49 patch adds the declaration and the useEffect state transitions; component now mounts cleanly and all three load states behave as specified."
+}

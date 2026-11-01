@@ -1,0 +1,47 @@
+{
+  "summary": "Backend-only retest of the ADMIN_EMAILS digest dedupe fix (iter29 follow-up). RESULT: FIX CONFIRMED — 11/11 assertions pass across 2 test files. (a) db.admin_email_digests has unique index key_1 {'key':1, unique:true} present after backend startup (no manual creation in the test). (b) Run 1 emailed jenn@sailmorenow.com exactly once and created exactly 1 claim doc. (c) Run 2 immediately after did NOT re-email and the collection still held exactly 1 doc for that key (previous duplicate-upsert bug gone). (d) Run 3 after backdating sent_at 9 days re-emailed exactly once and refreshed the SAME doc's sent_at (still 1 doc). (e) Per-recipient fault isolation verified by injecting a Mongo failure (RuntimeError from update_one/insert_one) for one of two ADMIN_EMAILS addresses: the failing address was skipped while the healthy address (jenn@) was still claimed + emailed. Additionally validated the server.py _startup duplicate-collapse migration: dropped key_1, seeded 2 legacy docs with the same key, restarted backend -> only the doc with the latest sent_at survived and the unique index was recreated. All test data cleaned up (admin_email_digests empty, admin users' admin_report_digest_sent_at restored, ADMIN_EMAILS env restored).",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {
+        "endpoint": "scheduler._monday_admin_report_digest_job (scheduler.py:310-335)",
+        "issue": "Case mismatch between the two dedupe paths: `extra` comes from admin_emails() (lowercased) but the skip check is `extra in target_emails` where target_emails holds the raw u['email']. If an admin user's stored email has any uppercase, the same person is emailed twice (once via the users path, once via the admin_email_digests path). Suggest comparing lowercased values."
+      },
+      {
+        "endpoint": "scheduler._monday_admin_report_digest_job (scheduler.py:323-332)",
+        "issue": "When a fresh (in-window) claim doc exists, matched_count==0 so the code always attempts an insert_one that is guaranteed to raise DuplicateKeyError. Works, but produces an avoidable write + Mongo duplicate-key error every run. A find_one/{key} short-circuit would be cleaner."
+      },
+      {
+        "endpoint": "db.users (data)",
+        "issue": "Two user documents exist with the same email jenn@sailmorenow.com and platform_role='admin'. The digest de-dupes because target_emails is a set, but duplicate admin user records are a data-integrity smell (users has a unique index on user_id only, not email)."
+      }
+    ]
+  },
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_iter29_admin_digest_dedupe.py",
+    "/app/backend/tests/test_iter30_startup_collapse.py",
+    "/app/test_reports/pytest/iter30_results.xml",
+    "/app/test_reports/pytest/iter30_collapse.xml"
+  ],
+  "action_items": [
+    "Optional polish only: lowercase-normalize the `extra in target_emails` comparison in scheduler.py so an admin whose stored email has uppercase does not get two digests.",
+    "Optional: avoid the guaranteed DuplicateKeyError write when a fresh claim doc already exists."
+  ],
+  "critical_code_review_comments": [
+    "scheduler.py:317-332 — claim logic is now correct and idempotent: non-upsert stale refresh (modified_count==1 => send) followed by a guarded insert_one relying on the unique index. Verified with real Mongo.",
+    "server.py:137-156 — duplicate collapse runs before create_index and is idempotent; verified by seeding legacy duplicates and restarting. Note it is O(dupe keys) with a second find per key, acceptable at this scale.",
+    "scheduler.py:314-335 — per-recipient try/except now isolates failures; verified that a raising recipient does not abort the remaining recipients."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter29_admin_digest_dedupe.py",
+    "/app/backend/tests/test_iter30_startup_collapse.py"
+  ],
+  "success_rate": {"backend": "100% (11/11 assertions)", "frontend": "not tested (backend-only request)"},
+  "seed_data_creation": "None persisted. Temporary: admin_email_digests claim docs for admin_email::jenn@sailmorenow.com, admin_email::test_iter30_admin@example.com and admin_email::test_iter30_legacy@example.com; ADMIN_EMAILS env temporarily set to 2 addresses; admin users' admin_report_digest_sent_at touched. All deleted/restored in finally blocks and verified (admin_email_digests is empty, unique index intact).",
+  "should_call_test_agent_after_fix": false,
+  "should_main_agent_self_test": true,
+  "test_credentials": "Not required — scheduler job invoked directly, no HTTP auth used.",
+  "context_for_next_testing_agent": "test_iter29_admin_digest_dedupe.py runs the digest job 4x with mailer.send_email monkeypatched; IMPORTANT: it keeps admin USERS' admin_report_digest_sent_at fresh so the ADMIN_EMAILS/admin_email_digests branch is the one exercised (backdating user stamps makes the users path win and the digest doc is never touched — that caused a false failure earlier). test_iter30_startup_collapse.py drops key_1, seeds duplicates and restarts backend via supervisorctl (~15s). pytest.ini forces xdist loadscope, so keep all assertions sharing a fixture in one class.",
+  "rca_of_the_issue": "iter29 bug (upsert with a freshness predicate in the filter re-inserting a duplicate doc and re-sending) is resolved: uniqueness is now enforced at the DB level (unique index on admin_email_digests.key created at startup after collapsing legacy duplicates) and the claim is insert-first/non-upsert-update, so a filter miss now means 'already claimed' instead of 'insert again'. Per-recipient try/except prevents a single Mongo error from dropping the remaining recipients."
+}

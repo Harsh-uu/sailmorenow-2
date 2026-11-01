@@ -1,0 +1,36 @@
+{
+  "summary": "Full backend + frontend verification of Crew Bank v3 features (status toggle, post-to-feed opt-in, prominent CREW BANK pill, landing 'Open crew slots' section, modal glitch fixes). 9/9 pytest cases pass sequentially. All UI behaviors verified: modal opens, Escape closes, body scroll locks, inside-click does not close, backdrop click closes (except at very top strip covered by sticky nav — see minor issue), status toggle Found⇄Seeking works with toast, post-to-feed checkbox present, opening a different event's modal shows fresh (non-stale) state. Landing OpenCrewSlots renders 1 card for Race Week Bellingham; free-user 402/premium-user 200 checks green.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "CrewBankModal / MainNav", "issue": "Sticky nav header has z-50 same as modal outer wrapper; at the top ~64px strip the header intercepts backdrop clicks (elementFromPoint(20,20) returns the HEADER, not the modal). Backdrop click works everywhere else. Fix: bump modal z-index to z-[60] (or make the top strip of the modal wrapper cover the header).", "selector": "[data-testid='crewbank-modal']", "priority": "LOW"}
+    ],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_crew_bank_v3.py",
+    "/app/backend/tests/test_events_aggregator_bugfix.py",
+    "/app/test_reports/pytest/iter3_results.xml"
+  ],
+  "action_items": [
+    "(Optional/minor) Raise CrewBankModal outer z-index above the sticky header (currently both z-50) so the very top strip is a clickable backdrop.",
+    "Note: run pytest with -n 0 for this suite — the parallel xdist scheduler causes a race between TestStatusPatch and TestOpenCrewSlots since they mutate the same crew_bank row."
+  ],
+  "critical_code_review_comments": [
+    "server.py is now 1376 lines — still over the 700-line guideline. Split into modules (events, crew_bank, aggregator_admin, auth, payments, seed).",
+    "GET /crew-bank/open — the $expr on event_ends_at compares full ISO ('$ifNull...') to now_iso[:10] ('YYYY-MM-DD'). String comparison works for lexicographic ISO but fragile: 'YYYY-MM-DD' < 'YYYY-MM-DDTHH:...' will match when dates are equal, which is what we want (event ending today is still active). Consider normalizing both sides to date strings explicitly for clarity.",
+    "CrewBankModal.jsx line 100: outer div uses z-50. MainNav sticky header also uses z-50. DOM order alone determines stacking → header wins at overlap. Prefer z-[60] on modal.",
+    "post_to_feed=True writes a post with id 'crew_{event}_{user}' via upsert. Good. But: turning off post_to_feed on a re-join does NOT delete the previously-created post — the community feed post lingers. Consider deleting the post when post_to_feed=false AND the doc exists, or when status flips to 'found'."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_crew_bank_v3.py (new)"
+  ],
+  "success_rate": {"backend": "100% (9/9)", "frontend": "100% functional (1 minor z-index nit)"},
+  "test_credentials": "Reused sessions from iteration_2. PREMIUM_TOKEN=test_tok_test-user-1784756320856-596 (subscription_tier=premium, market=Bellingham). FREE_TOKEN=test_tok_test-user-1784756320858-732. ADMIN_TOKEN=test_tok_test-admin-1784756320844-628.",
+  "seed_data_creation": "Temporarily inserted a crew_bank entry for the premium user against Race Week Bellingham to exercise landing OpenCrewSlots + modal-in-pool state; auto-cleaned at end via DELETE /events/{id}/crew and manual mongosh deletion of the linked_crew post.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Race Week id = agg_sarc-48north_57844cc82d515925. To reproduce landing OpenCrewSlots UI, POST /events/{race}/crew as PREMIUM_TOKEN first — otherwise the section is (correctly) hidden. Run pytest test_crew_bank_v3.py with -n 0 (sequential) — parallel xdist races on the shared crew_bank row.",
+  "rca of the issue": "No production bug found this iteration. The status-toggle upsert conflict (mentioned in the spec) is correctly avoided in server.py:562-566 by keeping status inside $set only and putting created_at into $setOnInsert. Verified by two back-to-back POSTs from the same user (positions changed, status remained 'seeking'), which returned 200 on both."
+}

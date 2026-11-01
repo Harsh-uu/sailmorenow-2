@@ -1,0 +1,31 @@
+{
+  "summary": "Iter 70 — Phase 3 regression complete on web + mobile. Backend pytest: 11/11 green (test_iter70_phase3.py). Verified: (1) POST /api/admin/community-partner/activate — founding partner re-activation preserves founding_partner=true; activate:false reverts to free; unknown email → 404; DB invariant countDocuments({founding_partner:true}) <= 5. (2) Lazy downgrade: user with subscription_expires in the past + tier='premium' auto-flips to 'free' on next GET /api/auth/me and then hits 402 upgrade_required on POST /api/posts. (3) partner_badge fields: /api/u/pugetsoundsailingsoc returns user.partner_badge='founding'; every doc in /api/posts and /api/events includes author_partner_badge / organizer_partner_badge keys (nullable). (4) Hide-on-lapse: /api/boat-pros and /api/crew-bank/standalone exclude entries whose owner subscription_expires < now. (5) Welcome email activation is fire-and-forget — endpoint returned 200 even though EMERGENT_EMAIL_KEY paths log 'skipped'. WEB smoke: fresh free boat_owner sees data-testid=upgrade-nudge on /dashboard with functional upgrade-nudge-cta (href='/pricing') + upgrade-nudge-dismiss (30-day localStorage). /u/pugetsoundsailingsoc renders founding-partner-badge ('★ FOUNDING PARTNER'). MOBILE smoke: same free boat_owner sees testID upgrade-nudge on /(tabs)/feed (screenshot confirms banner + × dismiss). Feed cards render founding-partner-badge. /events/seed_ev_2 detail screen renders '★ FOUNDING PARTNER' badge next to 'Hosted by Puget Sound Sailing Society'. No React Native red screens; only pre-existing 'shadow* deprecated' warning (unrelated to this phase).",
+  "platforms_tested": ["web", "mobile"],
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "web": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+    "mobile": {"ui_bugs": [], "integration_issues": [], "design_issues": [], "react_native_issues": []}
+  },
+  "parity_issues": [],
+  "test_report_links": [
+    "/app/backend/tests/test_iter70_phase3.py",
+    "/app/test_reports/pytest/iter70_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "deps.current_user_from_token performs a lazy DB write on every authenticated request when a tier is non-free — this is fine, but the write is unconditional inside the try even if subscription_expires is null. The `expd and expd < now` short-circuits it in practice; still worth a metric to confirm no runaway update_ones under load.",
+    "admin_router activate: the 'founding' check uses countDocuments({founding_partner: true}) < 5 without a transaction/upsert guard. Two concurrent activations could each read 4 and both write founding_partner=true, resulting in 6 founding partners. Low probability (admin-only endpoint) but worth documenting or wrapping in a findOneAndUpdate on a counter doc.",
+    "directory_router.list_boat_pros filters lapsed OWNERS but does not filter by subscription_tier — a user who was demoted to 'free' but still has a stale subscription_expires in the future (edge case: manual DB edits) would still surface. Consider filtering `subscription_tier != 'free'` on the boat_pro owner too.",
+    "community_router.list_standalone_crew: same lapse filter; also does not exclude subscription_tier='free' listings created before Phase 2 gating existed. If any legacy free-tier standalone listings remain, they'd still be public.",
+    "mailer.community_partner_welcome_email_html HTML-escapes org_name only in badge/founding paths (via `.replace('<','&lt;')` elsewhere) — org_name in the h1 line 'Hi {org_name or there}' is NOT escaped. Low risk (name is set by user themselves and shown to themselves) but worth a helper.",
+    "PartnerBadge.jsx renders both testids on the same element via ternary — this is correct. However, on web, when kind is neither 'founding' nor 'partner', the component returns null (good). On mobile partner.tsx the same pattern is used consistently. Parity is clean."
+  ],
+  "updated_files": ["/app/backend/tests/test_iter70_phase3.py"],
+  "success_rate": {"backend": "100% (11/11)", "frontend": "web 3/3 assertions verified live; mobile 3/3 verified live"},
+  "test_credentials": "Admin: jenn@sailmorenow.com / [REDACTED]. Free ephemeral test users prefixed TEST_iter70_ (auto-cleaned in module teardown). Founding partner sample: partner.psss@sailmorenow.dev / handle pugetsoundsailingsoc.",
+  "seed_data_creation": "Test users prefixed TEST_iter70_ + their boat_pros/crew_bank_standalone docs are auto-deleted in module teardown via mongosh. No shared seed data mutated. crew.alex@sailmorenow.dev tier state left as-is by this run.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Phase 3 (downgrade + upgrade nudge + partner welcome email + founding-partner badge) is clean. Registration payload requires: email, password, name, first_name, last_name, account_type, primary_market. account_type 'community_partner' is NOT accepted by /api/auth/register — use 'partner' for org accounts. Handle profile response shape is nested: `{user:{partner_badge}}`, not flat. Founding partner count invariant (≤5) holds — do not activate additional non-existing partners past this cap or you'll skew tests. Mobile Expo web preview screenshots the /(tabs)/feed UpgradeNudge as an orange banner with sparkle icon; testID renders as data-testid in the web DOM.",
+  "rca of the issue": "N/A — no bugs found."
+}

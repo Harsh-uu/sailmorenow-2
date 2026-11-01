@@ -1,0 +1,57 @@
+{
+  "summary": "Focused retest of the 5 iteration_11 fixes. ALL VERIFIED. (1) Mobile drawer is now portaled to document.body: at 390x844 the backdrop measures exactly 390x844 and the drawer 288x844 (was 390x64 / 288x64); backdrop parent is BODY; document.elementFromPoint at the centre of mobile-nav-community returns the NavLink itself (no tap-through); clicking outside the panel at (340,600) closes the drawer; mobile-nav-events navigates to /events and auto-closes. (2) CrewBankModal exposes BOTH data-testid='crewbank-close' (sr-only alias) and 'crewbank-modal-close'; each closes the modal. (3) PostComments comments-off copy deduped: exactly ONE message in all four states tested (signed-out/signed-in x zero-comments/has-comment) — empty-state line when no comments, italic footer when comments exist, never both; comment input correctly absent in all four. (4) Scheduler race-safety verified with a NEW test that patches mailer.send_email to raise: exactly 1 send attempt, reminder_sent_at persisted despite the failure (proving claim-before-send), and a second back-to-back _nightly_job run sends nothing. (5) Mongo indexes comments.post_id and comments.parent_id exist on the live DB and are created in server.py startup. Full regression: 160/160 passing (159 prior + 1 new race-safety test).",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {
+        "component": "CrewBankModal legacy alias",
+        "issue": "INFO/LOW: data-testid='crewbank-close' is a class='sr-only' <span>, so a normal Playwright/user click times out ('element is not visible / has no size'). It only works via dispatch_event('click') or force=True. Functionally fine as an automation alias, but future tests must not use a plain .click() on it. Preferred long-term: pass a closeTestId prop to Modal instead of a hidden span.",
+        "selector": "[data-testid=\"crewbank-close\"]",
+        "priority": "LOW"
+      },
+      {
+        "component": "Events list (aggregated events)",
+        "issue": "Pre-existing (not in scope, unchanged from earlier iterations): imported event descriptions render raw HTML as literal text, e.g. the SYSCO Twilight Tuesday card shows '<a href=\"https://www.regattanetwork.com/...\" target=\"_blank\">REGISTER HERE...</a><br>'. Aggregator descriptions should be stripped/sanitised to plain text before display.",
+        "selector": "Events.jsx event description",
+        "priority": "LOW"
+      }
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {
+        "screen": "Mobile drawer (390x844)",
+        "issues": [
+          "Now visually correct: full-height white panel, dimmed backdrop, footer market selector pinned at bottom. Iteration_11's clipped 64px panel defect is resolved."
+        ]
+      }
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_phase_e.py",
+    "/app/backend/tests/test_phase_d.py",
+    "/app/test_reports/pytest/phase_all_iter12.xml"
+  ],
+  "action_items": [
+    "No functional fixes required. Optional: replace the sr-only 'crewbank-close' span with a closeTestId prop on Modal so the legacy testid maps to the real, clickable button.",
+    "Optional: sanitise/strip HTML from aggregated event descriptions on the Events page."
+  ],
+  "critical_code_review_comments": [
+    "scheduler._nightly_job step 5 correctly claims reminder_sent_at via a conditional update (modified_count == 1) BEFORE send_email, so a concurrent/duplicate run cannot double-send. Trade-off worth documenting: if the SMTP send fails the reminder is permanently marked as sent and never retried (verified by test_reminder_claim_before_send_race_safe).",
+    "Behavioural note: a session whose reveal_at is already past with >=1 submission is auto-revealed in step 4, which legitimately removes it from step 5's reminder query — so the exact scenario in the request (reveal_at = now-1h, one submitted) never emails. The new test uses reveal_at = now+10h to exercise the reminder path; documented in the test docstring.",
+    "Test-harness fix applied: test_phase_d.TestAutoReveal.test_maybe_reveal_auto reused a motor client cached in sys.modules['deps'] that was bound to an already-closed loop, causing an order-dependent 'RuntimeError: Event loop is closed' when it ran after the phase_e scheduler tests in the same xdist worker. It now pops deps/notifications/mailer/routers.reviews_router before asyncio.run(), matching the phase_e helpers. Verified stable across two full runs."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_phase_e.py",
+    "/app/backend/tests/test_phase_d.py"
+  ],
+  "success_rate": {"backend": "100% (160/160)", "frontend": "100% (all 3 retested UI fixes pass)"},
+  "seed_data_creation": "Temporary: one TEST_ui12_* premium sailor + session, two allow_comments=false posts (one with a seeded comment) for the PostComments matrix. All deleted after testing; verified 0 remaining. seed_alex (crew.alex@sailmorenow.dev) identity_verified=true preserved.",
+  "should_call_test_agent_after_fix": false,
+  "should_main_agent_self_test": true,
+  "test_credentials": "Emergent Google OAuth; automated sessions minted directly in mongo per /app/auth_testing.md (cookie session_token on the preview domain works).",
+  "context_for_next_testing_agent": "Suite is 160 tests across test_phase_a..e, all green, ~105s with xdist loadscope. New test: TestReviewReminder.test_reminder_claim_before_send_race_safe (+ helper _run_nightly_boom). Any new test that calls asyncio.run() with backend modules MUST pop deps/notifications/mailer/routers.reviews_router from sys.modules first, or you will hit 'Event loop is closed' depending on test order. Known accepted trade-offs (not bugs to chase): GET /api/posts/{id}/comments has no post-existence check, comment cascade delete is one level deep, no rate limit on comment POST, reminder is not retried after an SMTP failure.",
+  "rca_of_the_issue": "Iteration_11's critical drawer defect (backdrop-filter on <header> creating a containing block for position:fixed) is resolved by createPortal(document.body) — geometry re-measured at 390x844 and confirmed. The only new failure encountered this round was a test-harness event-loop leak in test_phase_d (stale motor client from sys.modules), fixed in-scope; no application code was modified."
+}

@@ -1,0 +1,34 @@
+{
+  "summary": "Iter 92 — Full-stack verification of Sail More Now Club/Org CATEGORY multi-select + HOME MARKET editor. BACKEND: 6/6 pytest PASS (/app/backend/tests/test_iter92_orgcat_market.py). (1) GET /api/markets.org_categories == ['Yacht club','Racing Club','One Design Fleet','Cruising Association','Membership Club','Nonprofits & Youth sailing'] exactly. (2) POST /api/auth/register partner with org_categories[] stores org_categories (filtered to taxonomy, order preserved) + org_category=first; primary_market auto-added to markets[]. (3) PATCH /api/auth/profile: invalid primary_market → 400; valid → auto-adds to user.markets via $addToSet (previous markets retained); org_categories (partner only) sets org_categories + org_category=first; sailor sending org_categories is silently ignored. (4) GET /api/partners?category=... correctly matches on either org_categories[] or legacy org_category; new partner tagged with multiple categories appears in both filters. MOBILE: End-to-end verified on Expo preview — /profile home-market modal (edit-home-market-row → home-market-Tacoma) saved; API confirmed primary_market=Tacoma, markets=['Greater Seattle','Tacoma'] (auto-follow ✓); UI reflected 'Tacoma' + toast 'Home market updated'. Then /profile Club/Org category multi-select (edit-org-category-row → profile-orgcat-Racing Club + profile-orgcat-Membership Club, deselect Yacht club → save-org-category-btn) saved; API returned org_categories=['Racing Club','Membership Club'], org_category='Racing Club'; UI showed 'Racing Club, Membership Club' + toast 'Category updated'. /register page confirmed: Home market dropdown (reg-market-select) is visible for ALL account types including partner; partner Category multi-select modal exposes all 6 options with testIDs reg-orgcat-<cat> + reg-orgcat-done. WEB: /clubs renders org-cat-* chips for all 6 new categories, cards now show MULTIPLE org-cat chips per card for partners with multiple org_categories (verified on TEST Iter92/Mob/Sailing partners), filter by 'Racing Club' correctly returned the 3 multi-tagged partners. TEST Mob Org appears at 'Tacoma' confirming the mobile home-market change propagated to the Clubs directory. Cross-platform parity: PASS.",
+  "platforms_tested": ["web", "mobile"],
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "web": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+    "mobile": {"ui_bugs": [], "integration_issues": [], "design_issues": [], "react_native_issues": []}
+  },
+  "parity_issues": [],
+  "test_report_links": [
+    "/app/backend/tests/test_iter92_orgcat_market.py",
+    "/app/test_reports/pytest/iter92_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "auth_router.update_profile correctly uses $set for primary_market + $addToSet for the auto-followed market in a single update, preserving existing followed markets.",
+    "auth_router.update_profile gates org_categories updates on account_type == 'partner' — non-partner calls are silently ignored (returns updated user) rather than 400'ing. Acceptable per request, but consider returning 403 for clarity if a sailor tries to set org_categories.",
+    "community_router.list_partners uses an $or on {org_categories: cat} and {org_category: cat} inside an $and conds array — correctly intersects with market filter. Projection includes both fields so Clubs.jsx can prefer the array and fall back to the string.",
+    "Mobile register.tsx and profile.tsx consistently filter chosen categories to the whitelist via orgCategories/orgCatOptions from GET /api/markets — resilient to backend taxonomy changes without redeploy.",
+    "Clubs.jsx: data-testid=org-cat-chip-${p.user_id} is reused for each chip when a partner has multiple categories, so multiple elements share the same testID. Low-impact (visual), but a query_selector('[data-testid=\"org-cat-chip-<uid>\"]') will only match the first chip. Prefer org-cat-chip-${uid}-${c} if tests ever need per-category assertions."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter92_orgcat_market.py",
+    "/app/test_reports/iteration_92.json",
+    "/app/test_reports/pytest/iter92_results.xml"
+  ],
+  "success_rate": {"backend": "100% (6/6)", "frontend": "100% (mobile register + profile + web clubs all PASS)"},
+  "test_credentials": "Dynamic TEST_iter92_* users created via /api/auth/register (strong password Hunter2!pass). Admin not required for this iteration.",
+  "seed_data_creation": "Transient test partners/sailors created via register (TEST_iter92_partner_*, TEST_iter92_sailor_*, TEST_iter92_mob_partner_*). Also created TEST Iter92 Org and TEST Mob Org (partner accounts) visible in Clubs directory — safe to leave or clean up at main agent's discretion.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Regression suite at /app/backend/tests/test_iter92_orgcat_market.py is self-cleaning on IDs but leaves TEST_iter92_* users in DB — fine for subsequent iterations. If main agent evolves ORG_CATEGORIES taxonomy, update EXPECTED_ORG_CATEGORIES at top of the test file. The mobile profile editors use the same two modals (home-market-<m> / profile-orgcat-<cat>) — re-use these testIDs for any future mobile tests. Current legacy backfill map (ORG_CATEGORY_LEGACY_MAP) normalizes previous iter91 names ('Yacht clubs' etc.) at startup; iter92 did not re-verify that one-shot migration (not in scope).",
+  "rca of the issue": ""
+}

@@ -1,0 +1,78 @@
+{
+  "summary": "Focused retest of iteration_15 follow-ups. Backend: new /app/backend/tests/test_iter16.py (15 tests) covering GET /api/events intra-day precision, POST /api/events garbage rejection + canonicalization of 4 valid formats (date-only, Z, tz-naive, tz-aware offset) with mongo persistence verification, GET /api/admin/events full-precision filter + 403 gate, and startup normalize-migration selectivity (SMN_ALLOW_RESTART=1: log shows 'normalized ISO timestamps on 1 legacy events' — only the legacy date-only row rewritten, the already-canonical row's updated_at sentinel untouched — PASSED). Full regression: 260 passed / 3 failed / 11 skipped / 1 xfailed. test_phase_g.py::TestCreateEventCanonical::test_ended_one_hour_ago_hidden now PASSES as requested. BUT the same-day fix introduced a new regression in the opposite direction: date-only (all-day) events normalize to midnight UTC and are therefore hidden by GET /api/events for the entire day they occur (test_phase_g::test_today_date_only_still_visible and test_iter16::test_date_only_today_all_day_event both fail). Frontend: found and fixed a CRITICAL crash — Profile.jsx used <Avatar> without importing it, so /profile rendered a full-page 'ReferenceError: Avatar is not defined' runtime overlay (confirmed with screenshot before fix, eslint jsx-no-undef). After adding the missing import, Avatar rollout verified end-to-end with a seeded dead picture URL across Feed, Header, Profile, CrewBank, CrewBankModal, OpenCrewSlots (Landing), PostComments, Reviews, Digest — zero broken <img> (naturalWidth==0) on any page, zero page errors, fallback rendered as tinted 36x36 circle exactly matching h-9 w-9 and fully contained in the parent card, and emoji-only avatar (author_avatar='\ud83d\udc19') renders inside the circle bounds.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {
+        "endpoint": "GET /api/events",
+        "issue": "REGRESSION from the intra-day fix: date-only / all-day events are hidden on the day they happen. normalize_iso('2026-08-21') -> '2026-08-21T00:00:00+00:00', which is < now for the whole day, so an all-day event dated today never appears. Worse for Pacific users: an all-day event dated tomorrow local disappears at 17:00 PDT today (UTC midnight boundary). Aggregator single-day events survive only because the importer writes ends_at = next-day midnight, so they too vanish at 17:00 PDT on the event day. Suggested fix: compare against now for rows with a real time component but fall back to start-of-today (or ends_at + 1 day) for midnight/date-only rows, e.g. $expr with $max of (ends_at||starts_at) vs today_start when the timestamp ends in T00:00:00+00:00. Failing tests: test_phase_g.py::TestCreateEventCanonical::test_today_date_only_still_visible, test_iter16.py::TestIntradayPrecision::test_date_only_today_all_day_event."
+      },
+      {
+        "endpoint": "server.py startup normalize migration",
+        "issue": "Legacy rows with ends_at == '' (empty string) are matched by the migration filter but never repaired: normalize_iso('') returns None and the `if e and e != ...` guard skips the update, so (a) the migration re-scans that row on every boot and never converges, and (b) $ifNull:['$ends_at','$starts_at'] yields '' (not null) so the event is permanently invisible in GET /api/events and /api/admin/events regardless of starts_at. One such row exists in the current DB (id c2d51544-cd19-40cc-bdca-aa33f88ea063). Fix: treat empty/blank ends_at as an explicit $set to null. Failing test: test_iter16.py::TestNormalizeMigrationSelectivity::test_no_non_canonical_rows_remain."
+      },
+      {
+        "endpoint": "GET /api/crew-bank/open",
+        "issue": "Inconsistent with the new policy — still compares against now_iso[:10] (date-only). Either keep both date-only or move both to full precision so the events list and the open-crew-slots widget cannot disagree about what is 'past'."
+      }
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {
+        "component": "Profile.jsx",
+        "issue": "FIXED BY TESTER: <Avatar> was used at line 105 without any import, so /profile crashed with 'ReferenceError: Avatar is not defined' (whole page replaced by the CRA runtime-error overlay). Added `import Avatar from \"@/components/Avatar\";`. Please keep the import; eslint react/jsx-no-undef catches this class of bug — run lint before shipping.",
+        "selector": "/profile route",
+        "priority": "CRITICAL"
+      },
+      {
+        "component": "Header.jsx / Profile.jsx",
+        "issue": "Minor inconsistency: when user.picture is absent, Profile falls back to the user's chosen emoji (user.avatar) but Header passes only user.picture to <Avatar>, so emoji-avatar users get the generic User icon in the nav. Pass src={user.picture || user.avatar}.",
+        "selector": "header [data-testid] avatar",
+        "priority": "LOW"
+      },
+      {
+        "component": "Directory.jsx:30 / DirectoryDetail.jsx:82",
+        "issue": "Boat Pro photo_url is still a raw <img> with no onError fallback — a dead pro photo will show the browser broken-image glyph. Not part of this rollout's scope but the last remaining offender.",
+        "selector": "img[alt$='company_name']",
+        "priority": "LOW"
+      }
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {
+        "screen": "/events",
+        "issues": [
+          "Date-only aggregator events render as 'Aug 22, 2026, 12:00 AM' — the synthetic midnight from normalize_iso is shown as a real start time and misleads users. Suppress the time portion when the stored timestamp is exactly T00:00:00+00:00."
+        ]
+      }
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter16.py",
+    "/app/backend/tests/test_phase_g.py",
+    "/app/test_reports/pytest/phase_all_iter16.xml"
+  ],
+  "action_items": [
+    "Restore visibility of all-day / date-only events on their own day while keeping intra-day precision for timed events (GET /api/events + GET /api/admin/events share the same $expr).",
+    "Repair ends_at == '' in the startup migration (set to null) so the row stops being permanently invisible and the migration converges.",
+    "Align GET /api/crew-bank/open with the events past-filter precision.",
+    "Keep the Avatar import added to Profile.jsx and add `yarn lint` (or eslint react/jsx-no-undef) to the pre-ship checklist."
+  ],
+  "critical_code_review_comments": [
+    "The now-ISO comparison is duplicated verbatim in community_router.list_events and admin_router.admin_list_events; extract an `upcoming_event_predicate(now)` helper next to aggregator.past_event_predicate so the three filters cannot drift again.",
+    "create_event's local _is_valid() only checks the '+00:00' suffix; validate in schemas.EventCreate (pydantic validator running normalize_iso) so every write path — aggregator, admin, seed — gets the same guarantee instead of just this one endpoint.",
+    "normalize_iso fails open on unparseable input; consider a strict variant used by write paths so bad data can never reach mongo."
+  ],
+  "updated_files": [
+    "/app/frontend/src/pages/Profile.jsx",
+    "/app/backend/tests/test_iter16.py"
+  ],
+  "success_rate": {"backend": "98% (260/263 non-skipped; 3 failures = 2 distinct defects)", "frontend": "100% of avatar assertions after fixing the Profile.jsx import"},
+  "seed_data_creation": "Temporary mongo docs: user TEST_i16_ui_user (picture=dead placeholder URL, avatar='\ud83d\udc19', identity_verified), session TEST_i16_ui_token, post TEST_i16_post, comment TEST_i16_comment, crew_bank + crew_bank_standalone entries. All deleted after the run; seed_alex.identity_verified re-verified true.",
+  "should_call_test_agent_after_fix": true,
+  "should_main_agent_self_test": false,
+  "test_credentials": "/app/memory/test_credentials.md (OAuth-only; tests mint mongo sessions per /app/auth_testing.md)",
+  "context_for_next_testing_agent": "Run `cd /app/backend && python -m pytest tests/ -q` for the full suite; the migration-restart tests need SMN_ALLOW_RESTART=1 -o addopts=''. Expected remaining failures until fixed: test_phase_g::test_today_date_only_still_visible, test_iter16::test_date_only_today_all_day_event (all-day events hidden), test_iter16::test_no_non_canonical_rows_remain (legacy ends_at='' row). Avatar rollout is complete and verified across all 9 call sites; re-verify only if new avatar sites are added. Browser User-Agent header is required for backend requests.",
+  "rca_of_the_issue": "Switching list_events/admin_list_events from today_iso (date-only) to datetime.now().isoformat() gives correct intra-day behaviour for timed events, but date-only inputs are canonicalized to 00:00:00+00:00, so their 'end' is the very start of the day. Any all-day event is therefore treated as past from the first second of its own day (and, in Pacific local time, from 17:00 the previous day). The filter needs to distinguish a genuine midnight-precision (all-day) timestamp from a timed one — e.g. keep a date-granularity comparison when the stored value ends with T00:00:00+00:00. Separately, ends_at='' bypasses the migration's update guard and defeats $ifNull, permanently hiding that event."
+}

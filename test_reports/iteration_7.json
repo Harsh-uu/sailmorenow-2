@@ -1,0 +1,61 @@
+{
+  "summary": "Phase B validation (backend + frontend). Wrote /app/backend/tests/test_phase_b.py (23 tests, xdist-safe, full teardown): 22 passed / 1 failed. Boat Pro credential persistence + Featured/Premium exposure vs Basic stripping verified on both list and detail endpoints. Self-serve sailor<->boat_owner swap verified (200 + persistence via /auth/me, 400 for boat_pro/partner, 400 for boat_pro target, 401 anon, 422 empty body). Phase A regression spot-checks (post expiry filter, crew_join notify, notifications list + mark-read, core GETs) all pass. Frontend e2e via minted mongo sessions: sailor role-swap section + click-to-swap + swap-back, partner/boat_pro hiding, boat_pro creds tag editors (add/remove/save for all 3 fields), Feed verified badge + account-type badge all work. ONE REAL BUG FOUND in GET /api/posts author enrichment (authors silently dropped -> author_verified always false, badges missing in Feed).",
+  "backend_issues": {
+    "critical": [
+      {
+        "endpoint": "GET /api/posts",
+        "issue": "Author enrichment uses `.to_list(len(author_ids))` (community_router.py L55). The limit equals the number of DISTINCT author ids, but the query can return MORE documents than that when duplicate user docs exist (there are currently 2 `seed_jane` docs in test_database). Extra duplicates consume the cursor limit, so trailing authors are silently dropped from `umap` -> author_verified=false, author_last_active_at=null, author_account_type falls back to the post doc (null for crew auto-posts). Reproduced deterministically: newly created post by a verified user returned author_verified=false. Fix: `.to_list(None)` (or `len(author_ids) + slack`).",
+        "priority": "HIGH"
+      },
+      {
+        "endpoint": "POST /api/boat-pros",
+        "issue": "`tier` is taken straight from the client body with no check against the caller's subscription_tier (and no check that account_type == 'boat_pro'). A Basic/free Boat Pro can POST tier:'premium' and both un-gate their certifications/licenses/insurance and jump to the top of the /boat-pros sort order. Tier gating is therefore trivially bypassable.",
+        "priority": "HIGH"
+      }
+    ],
+    "minor": [
+      {
+        "endpoint": "data / seed",
+        "issue": "Duplicate user document for user_id 'seed_jane' (2 copies) — non-idempotent seed. Recommend de-dupe + unique index on users.user_id; this duplicate is what triggered the enrichment truncation bug above."
+      },
+      {
+        "endpoint": "POST /api/events/{id}/crew (post_to_feed)",
+        "issue": "Crew auto-post document does not set `author_account_type` (unlike POST /api/posts), so it relies entirely on the /api/posts enrichment; with the truncation bug those posts render with no account-type badge in the Feed (visible for 'Jenn McDonald' posts)."
+      }
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [
+      {
+        "flow": "Feed enriched author card",
+        "issue": "2 of 6 posts (crew auto-posts by 'Jenn McDonald') render with no account-type badge, no verified badge and no activity dot — downstream of the GET /api/posts enrichment truncation bug, not a Feed.jsx defect.",
+        "affected_selectors": ["article[data-testid^='post-']", "img[alt='Verified']"]
+      }
+    ],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_phase_b.py",
+    "/app/test_reports/pytest/phase_b_results.xml"
+  ],
+  "action_items": [
+    "community_router.py L55: change `.to_list(len(author_ids))` to `.to_list(None)` so author enrichment never truncates; re-run tests/test_phase_b.py::TestEnrichedAuthorCards::test_author_fields_flow_through.",
+    "De-duplicate the 'seed_jane' user doc and make the seeder idempotent (upsert on user_id); consider a unique index on users.user_id.",
+    "POST /api/boat-pros: derive `tier` server-side from the user's subscription_tier (or validate body.tier <= subscription_tier) and require account_type == 'boat_pro', otherwise the Featured/Premium credential gating is bypassable.",
+    "Set author_account_type on the crew auto-post document in join_event_crew for parity with create_post."
+  ],
+  "critical_code_review_comments": [
+    "Never size a Motor cursor limit off an expected-uniqueness count (`to_list(len(ids))`) — duplicates or unexpected matches silently truncate results, which is exactly what broke author_verified.",
+    "_strip_gated_fields() mutates the dict in place and its return value is ignored at call sites — works, but make the contract explicit (either always use the return value or rename to _strip_gated_fields_inplace).",
+    "Client-controlled `tier` on POST /boat-pros makes the whole Featured/Premium visibility model advisory rather than enforced."
+  ],
+  "updated_files": ["/app/backend/tests/test_phase_b.py"],
+  "success_rate": {"backend": "96% (22/23)", "frontend": "100% of Phase B flows (1 data-driven rendering gap traced to backend bug)"},
+  "seed_data_creation": "Ephemeral only. Backend: TEST_userB_* users/sessions/boat_pros/posts/events (auto-teardown in module fixture). Frontend: TEST_fe_sailor / TEST_fe_pro / TEST_fe_partner users + sessions + one boat_pros doc — all deleted after the run. Existing seed users untouched except seed_alex, which now has identity_verified=true + last_active_at set (kept intentionally so the Feed verified badge is demoable; remove if unwanted).",
+  "should_call_test_agent_after_fix": true,
+  "should_main_agent_self_test": false,
+  "test_credentials": "No passwords — Emergent Google OAuth. Sessions minted directly in mongo per /app/auth_testing.md (mint_user() helper in test_phase_b.py).",
+  "context_for_next_testing_agent": "test_phase_b.py covers B.1/B.2/B.3 + Phase A regression and is xdist-safe (RUN_PREFIX='TEST_userB_'). The only failing test is TestEnrichedAuthorCards::test_author_fields_flow_through, failing purely because of the to_list(len(author_ids)) truncation bug; it should pass once that one-liner is fixed. Stripe checkout was intentionally not tested. Frontend Profile/Feed Phase B UI is fully working — re-test only the Feed badges after the backend fix.",
+  "rca_of_the_issue": "GET /api/posts collects distinct author_ids then runs db.users.find({user_id:{$in:author_ids}}).to_list(len(author_ids)). Because test_database contains a duplicate 'seed_jane' user document, the cursor yields 6 docs for 5 distinct ids and the limit of 5 cuts off the last author. That author is missing from umap, so author_verified is forced to False, author_last_active_at to None, and author_account_type falls back to the (often absent) value stored on the post. Repro: mint a user, create a post, set identity_verified=true on the user, GET /api/posts -> author_verified=false. Mitigation: to_list(None) plus de-duping users and adding a unique index on user_id."
+}

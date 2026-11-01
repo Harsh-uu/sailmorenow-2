@@ -1,0 +1,29 @@
+{
+  "summary": "Iteration 68 — Phase-1 'Find Your Place' role selector verified on WEB + MOBILE + shared backend (all 5 requested items pass). Backend: POST /api/contact accepts optional 'subject' (4/4 pytest — validation for short msg / missing name / bad email + happy path 'Community Partner inquiry' returns {ok:true} and persists subject+message to db.contact_messages verified via mongosh). WEB (Landing.jsx): find-your-place section present; all 4 role pins role-pin-sailor/boat_owner/boat_pro/partner switch role-card-<key> AND role-premium-<key>; sailor/boat_owner/boat_pro show role-plans-<key> (Link → /pricing) + role-join-<key> (Join as <role>); Organization shows 'Become a Community Partner' with NO public price ($1000/'1000'/'1,000' absent from role-premium-partner) and partner-lets-chat-btn opens partner-inquiry-modal — submit path partner-name-input+partner-email-input+partner-inquiry-submit → partner-inquiry-sent renders. MOBILE (app/index.tsx) parity: path-pin/path-card/path-upgrade for all 4 keys, correct role icons (people-outline sailor, boat-outline boat_owner, construct-outline boat_pro, megaphone-outline partner), partner block titled 'Become a Community Partner' (rendered ALL-CAPS via upgradeTitle textTransform:'uppercase' — content correct, only visual case-transform), NO public price, partner-lets-chat-btn opens sheet with partner-name-input/email/org/note+partner-inquiry-submit → partner-inquiry-sent shown. Per-role copy verified verbatim: Boat Owner free list first bullet 'Browse Crew Banks — seasonal and per event' (both web+mobile), Boat Pro tagline 'Get discovered by boat owners in your local PNW market' (both), Boat Pro premium = Enhanced profile / Optimized search placement / Business featured in newsletter / Leave & receive reviews (both). Final CTA copy 'Join your local sailing community in under a minute.' present on both surfaces. No regressions.",
+  "platforms_tested": ["web", "mobile"],
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "web": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+    "mobile": {"ui_bugs": [], "integration_issues": [], "design_issues": [], "react_native_issues": []}
+  },
+  "parity_issues": [],
+  "test_report_links": [
+    "/app/backend/tests/test_iter68_contact_subject.py",
+    "/app/test_reports/pytest/iter68_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Landing.jsx role premium note is missing for boat_pro (no `premiumNote` key) while sailor/boat_owner use UPGRADE_NOTE. Intentional per spec (Boat Pro premium is a paid tier, not the $6.99 upsell) — LGTM but worth a comment there.",
+    "directory_router.py /api/contact stores subject as `subject: subject or None` — good, nullable when omitted. Rate limit remains 3/10min/IP (unchanged); validation runs BEFORE rate_limit(), so bad payloads don't consume the bucket (verified with 3 invalid + 1 valid submissions in a row).",
+    "app/index.tsx `upgradeTitle` style uses `textTransform:'uppercase'` which visually renders 'Become a Community Partner' as 'BECOME A COMMUNITY PARTNER'. Content in source is correct; only a visual choice. If the design intent was to preserve title-case here (to match the more premium/private feel), remove `textTransform: 'uppercase'` from styles.upgradeTitle (line ~361).",
+    "Both surfaces use identical role.free / role.premium arrays — good parity. Consider extracting to a shared JSON or backend endpoint later so future copy edits stay in sync automatically."
+  ],
+  "updated_files": ["/app/backend/tests/test_iter68_contact_subject.py"],
+  "success_rate": {"backend": "100% (4/4)", "frontend": "100% (web + mobile all checks pass)"},
+  "test_credentials": "None — home screens render only when logged out; no auth used.",
+  "seed_data_creation": "3 TEST_ contact_messages left behind (marker in one of them + 2 partner-inquiry submissions from web/mobile UI tests). Rate-limit bucket has consumed 3/3 for the test IP — subsequent /api/contact submissions from same IP will 429 for up to 10 minutes.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Phase-1 home overhaul is clean on both surfaces. For future retests: /api/contact rate-limit is 3/10min/IP — do NOT retest partner inquiry flow immediately after this run (wait 10 min or use a different egress IP). Mobile inquiry sheet requires wheel-scrolling inside the modal to reveal partner-inquiry-submit (the sheet is scrollable, maxHeight:88%); use `bounding_box()` + `page.mouse.wheel` inside the sheet area. Mobile upgradeTitle renders as uppercase (visual style), so use case-insensitive assertions on that string.",
+  "rca of the issue": "N/A — no bugs found."
+}

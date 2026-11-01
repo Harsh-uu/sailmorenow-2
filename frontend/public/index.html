@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <meta name="theme-color" content="#1F3F5B" />
+
+    <!-- Pre-paint theme picker. Reads the stored preference (or the OS
+         preference) BEFORE the first paint so a saved dark-mode user
+         doesn't get a one-frame light flash on page load. Falls back
+         silently if localStorage/matchMedia are unavailable. -->
+    <script>
+      (function () {
+        try {
+          var t = localStorage.getItem("smn-theme");
+          if (t !== "light" && t !== "dark") {
+            t = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+          }
+          if (t === "dark") document.documentElement.classList.add("dark");
+          var meta = document.querySelector("meta[name='theme-color']");
+          if (meta) meta.setAttribute("content", t === "dark" ? "#0f172a" : "#1F3F5B");
+        } catch (e) {}
+      })();
+    </script>
+
+    <title>Sail More Now — Pacific Northwest sailing community</title>
+    <meta name="description" content="The community hub connecting boat owners, sailors, trusted local Boat Pros, and the organizations that keep Pacific Northwest sailing thriving." />
+    <meta name="application-name" content="Sail More Now" />
+    <meta name="apple-mobile-web-app-title" content="Sail More Now" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+
+    <!-- Favicons — the round Sail More Now logo (background removed) rendered
+         at the sizes browsers actually request. .ico still shipped for the
+         handful of embedders/OAuth chrome that ignore <link rel=icon>. -->
+    <link rel="icon" href="/favicon.ico" sizes="any" />
+    <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16.png" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+    <link rel="mask-icon" href="/apple-touch-icon.png" color="#1F3F5B" />
+    <link rel="manifest" href="/manifest.json" />
+
+    <!-- Open Graph / Twitter — makes any share preview (and the tab shown by
+         Emergent Google auth's redirect flow) render the Sail More Now brand. -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Sail More Now" />
+    <meta property="og:title" content="Sail More Now — Pacific Northwest sailing community" />
+    <meta property="og:description" content="The community hub connecting boat owners, sailors, trusted local Boat Pros, and the organizations that keep Pacific Northwest sailing thriving." />
+    <meta property="og:image" content="/og-image.jpg" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:video" content="/hero-loop.mp4" />
+    <meta property="og:video:type" content="video/mp4" />
+    <meta property="og:video:width" content="1280" />
+    <meta property="og:video:height" content="720" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:player" content="/hero-loop.mp4" />
+    <meta name="twitter:player:width" content="1280" />
+    <meta name="twitter:player:height" content="720" />
+    <meta name="twitter:title" content="Sail More Now — Pacific Northwest sailing community" />
+    <meta name="twitter:description" content="More time on the water starts here." />
+    <meta name="twitter:image" content="/og-image.jpg" />
+  </head>
+  <body>
+    <div id="root"></div>
+  </body>
+</html>

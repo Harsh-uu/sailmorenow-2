@@ -1,0 +1,34 @@
+{
+  "summary": "Iter 84 — E2E testing of 5 features on shared backend + web + mobile: (1) Suggestions with reason + dismiss (2) Followers list + Block/Unblock (3) Moderation Undo (restore-doc, hide) (4) Import Health 'Select missing contact' bulk selector on web AdminEvents (5) NotificationsBell Undo toast (web) + inline notif-undo pill (mobile).\n\n=== BACKEND ✅ 10/10 pass (/app/backend/tests/test_iter84_dismiss_block_undo.py, /app/test_reports/pytest/iter84_results.xml) ===\n  • Suggestions: every item carries a non-empty `reason` string. 401 without auth. Dismissed target excluded on next call + idempotent. Already-followed excluded. Follow self -> 400.\n  • Block flow: Bob follows Alice; /follows/followers shows Bob; Alice POST /follows/block/{bob} removes Bob's follow AND blocks re-follow (Bob repost -> 403); /follows/blocked lists Bob; Alice can't follow Bob while blocked -> 400; blocked user excluded from Alice's suggestions; DELETE /follows/block/{bob} unblocks and Bob can follow again. Block self -> 400.\n  • Moderation Undo: POST /admin/moderation/remove returns {ok, removed, snapshot:{id,...}, target_type:'post'}; POST /admin/moderation/restore-doc with that snapshot re-inserts the post and makes it visible via GET /api/posts. POST /admin/moderation/restore then POST /admin/moderation/hide re-hides (post gone from GET /api/posts). All 3 admin endpoints reject non-admin (401/403).\n\n=== WEB ✅ (jenn admin, 1440x900) ===\n  • /following: follow-suggestions shows 6 rows; each has 'suggestion-follow-{id}' + 'suggestion-dismiss-{id}' + a reason line ('In Portland/Vancouver', 'Community organization'). Dismiss removes the row instantly.\n  • /following: 'followers-section' renders always ('No followers yet.' when empty). 'blocked-section' hidden until a block exists.\n  • /admin/events: 'select-missing-contact' button present with count badge (12). Click selects all 12 aggregator events missing organizer info (checkboxes true), opens 'bulk-bar' with bulk-organizer-name/email + bulk-apply, and each selected card shows 'needs-contact-{id}' red badge.\n  • NotificationsBell: Restore shows Sonner toast 'Content restored.' with Undo action; clicking Undo triggers /admin/moderation/hide and shows 'Undone' toast.\n\n=== MOBILE (Expo web preview 390x844) ✅ ===\n  • /following-list: follow-suggestions section shows 6 rows with reason line + suggestion-follow + suggestion-dismiss. Dismiss removes row.\n  • /following-list: followers-section renders under suggestions. blocked-section only visible when blocked list non-empty.\n  • /notifications: 12 content_hidden rows each expose notif-restore-{id} + notif-remove-{id}. Tapping Restore replaces the pill row with a 'Restored' label + notif-undo-{id} pill; tapping Undo shows 'Undone' toast, removes the pill, and brings back notif-restore/notif-remove.\n\nParity: identical behavior on web + mobile for suggestions/dismiss, followers-section, and undo. No divergence.",
+  "platforms_tested": ["web", "mobile"],
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "web": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+    "mobile": {"ui_bugs": [], "integration_issues": [], "design_issues": [], "react_native_issues": []}
+  },
+  "parity_issues": [],
+  "test_report_links": [
+    "/app/backend/tests/test_iter84_dismiss_block_undo.py",
+    "/app/test_reports/pytest/iter84_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "follows_router._blocked_ids: correctly aggregates both directions of block relationship — verified by the 'blocked user excluded from suggestions' test.",
+    "follows_router.follow_org: 403 when target has blocked me (org blocker) vs 400 when I have blocked target — different semantics preserved (avoid leaking info to blocked user via 400).",
+    "follows_router.block_user: single upsert on follow_blocks + delete_many both follow directions — atomic-ish + idempotent (repeat POST /follows/block/{id} is safe).",
+    "reports_router.moderation_remove: returns snapshot before deletion; restore-doc validates snapshot.id and no-ops if doc already exists (idempotent undo). $unset of hidden_pending_review on restore-doc makes the post visible on GET /api/posts.",
+    "AdminEvents.needsContact predicate = source=='aggregator' && (!organizer_name || !organizer_email). select-missing-contact uses `visible.filter(needsContact)` so it respects current filters — good UX.",
+    "NotificationsBell (web): toast.success(..., { action:{label:'Undo', onClick:undo} }) — sonner pattern. undo() correctly calls /admin/moderation/hide OR /admin/moderation/restore-doc with the captured snapshot.",
+    "mobile/notifications.tsx: undoInfo state keyed by notif.id stores the snapshot in-memory only. Refreshing the notifications tab or backgrounding the app will lose the undo option — acceptable per spec but worth documenting."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter84_dismiss_block_undo.py"
+  ],
+  "success_rate": {"backend": "100% (10/10)", "frontend": "web 4/4 flows, mobile 3/3 flows"},
+  "test_credentials": "Admin: jenn@sailmorenow.com / [REDACTED] Mobile via localStorage.session_token (JSON-encoded).",
+  "seed_data_creation": "~4 TEST84 posts created + auto-hidden + then removed/restored via admin (net zero: 2 remain restored, 2 re-hidden). ~10 disposable iter84_*@example.com sailor accounts registered. 1 block/unblock roundtrip between two disposable accounts (net zero).",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "All iter 84 flows fully green. NotificationsBell undo toast uses Sonner action button (label 'Undo'); Mobile notifications uses an inline notif-undo-{id} pill that appears in-place after moderate action. The GET /api/posts response is a bare list (not {posts: [...]}) — future tests should handle both shapes. admin's follow count grew slightly during testing but /following-list suggestions still show at <5 threshold.",
+  "rca of the issue": ""
+}

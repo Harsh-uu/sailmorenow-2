@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+# Keeps docs/ICONS.md honest: fails the commit if either <Icon> registry
+# (frontend/src/components/Icon.jsx or mobile/src/components/Icon.tsx) changed
+# but docs/ICONS.md was not regenerated.
+# Install with:  bash scripts/install-hooks.sh
+set -e
+ROOT="$(git rev-parse --show-toplevel)"
+node "$ROOT/scripts/gen-icon-docs.js" --check

@@ -1,0 +1,51 @@
+{
+  "summary": "Iter 87 — regression on the 7 flow groups from the review request. Backend: 14/15 pass. Found 2 real spec gaps:\n  (A) BACKEND SPEC GAP — /api/follows/{user_id}: FREE user can follow another user without an upgrade gate. Returns 200 instead of 403 upgrade_required. follows_router.follow_org has NO require_interaction(u) call (/app/backend/routers/follows_router.py:108-134).\n  (B) MOBILE SPEC GAP — /app/mobile/src/lib/upgrade.ts handleUpgrade() only matches e.status === 402, but require_interaction() in deps.py raises HTTP 403 with the same {code:'upgrade_required'} payload. Web (api.js) already handles both 402 AND 403 — mobile only handles 402. Impact: FREE users on mobile hitting DM / posts / comments / reactions / reviews get a raw error instead of the paywall toast + /pricing redirect.\n\nAll other flows verified:\n  • Signup: Club/Organization (partner) role works. 18+/guidelines check enforced (400). Password strength rules (8+/upper/digit/special) all enforced (400 for custom validator, 422 for pydantic length). Valid signup returns {user, session_token} with subscription_tier='free'.\n  • Pricing /payments/packages: Boat Pro $12.99/$19.99/$29.99 with 0/10%/20% discounts at 1/6/12mo. Sailor+Owner premium $6.99 with 0/10%/15%/20% at 1/3/6/12mo. Totals correct (pro_basic_12 = $124.70). /payments/checkout returns a Stripe test checkout URL + amount. Web /pricing: default tab 'Sailors & Owners' selected, Boat Pros tab shows all 3 tier cards with Featured highlighted, discount pills render correctly.\n  • Free DM gating: POST /messages/{id} with free token → 403 {detail:{code:'upgrade_required', message:...}}.\n  • Boat Pro: GET /boat-pros/{id} returns {pro, reviews} wrapper with pro.viewer_hired + pro.hire_count. POST /boat-pros/{id}/hire toggles (hired + count). POST /reviews requires 4 category_ratings (personality, skill, promptness, communication) 1..5. PATCH + DELETE /admin/content/review/{id} edit+delete work; review removed from /reviews list.\n  • Events: POST /events accepts starts_at/ends_at with 15-min granularity (14:15, 16:45 preserved as +00:00). Backend normalizes trailing Z to +00:00. is_volunteer flag persists. GET /events?market=... supports from/to window. POST /events/{id}/register works. POST /events/{id}/crew for volunteer sign-up. PATCH /events/{id} admin edit persists in list.\n  • Community: POST /posts for_sale with price + condition succeeds. POST /posts/{id}/comments. PATCH + DELETE /admin/content/post/{id} edit+delete persist (admin_edited flag added).\n\nNote on event dates during this iteration: system clock is 2026-10-03 so events in Sept 2026 appear in the past and are filtered out by the upcoming-event predicate — I migrated the test to a December 2026 window.",
+  "platforms_tested": ["web", "mobile"],
+  "backend_issues": {
+    "critical": [
+      {"endpoint": "POST /api/follows/{user_id}", "issue": "Spec says FREE users should see an upgrade prompt when following a user. Endpoint currently returns 200 and silently follows. follows_router.follow_org (lines 108-134) does NOT call require_interaction(u). Add require_interaction(u) after `u = await _me(...)` to match the DM/post/comment gating pattern.", "priority": "HIGH"}
+    ],
+    "minor": []
+  },
+  "frontend_issues": {
+    "web": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+    "mobile": {
+      "ui_bugs": [],
+      "integration_issues": [
+        {"flow": "Free-tier paywall across DMs/posts/comments/reactions/reviews", "issue": "/app/mobile/src/lib/upgrade.ts:9 only matches e.status === 402, but require_interaction() in /app/backend/deps.py raises HTTP 403 with the same {code:'upgrade_required'} payload. Web lib/api.js handles BOTH 402 and 403. Mobile only handles 402 — users hitting a 403 upgrade_required see a raw ApiError instead of the paywall toast + /pricing redirect. Fix: change condition to `(e.status === 402 || e.status === 403) && e.code === 'upgrade_required'`.", "affected_testIDs": ["dm-send", "post-submit", "comment-submit", "reaction-btn-*", "review-submit"]}
+      ],
+      "design_issues": [],
+      "react_native_issues": []
+    }
+  },
+  "parity_issues": [
+    {"flow": "Paywall on gated interactions (DMs, posts, comments, reactions, reviews)", "platform": "mobile", "issue": "Web handles the 403 upgrade_required branch, mobile only handles 402. Spec in review request literally says '402/403 upgrade_required handled as a toast/banner, NOT a raw error' — mobile currently fails that for every 403 case.", "expected": "Mobile shows warning toast + routes to /pricing on 403 upgrade_required (same as web).", "actual": "Mobile falls through to generic error toast."}
+  ],
+  "test_report_links": [
+    "/app/backend/tests/test_iter87_regression.py",
+    "/app/test_reports/pytest/iter87_results.xml"
+  ],
+  "action_items": [
+    "BACKEND (HIGH): Add `require_interaction(u)` inside follow_org() in /app/backend/routers/follows_router.py right after the self-follow / blocked checks, so free users get 403 {code:'upgrade_required'} instead of a silent 200. (Mirror the pattern already used in messaging_router.send_message and community_router.create_post.)",
+    "MOBILE (HIGH): Update /app/mobile/src/lib/upgrade.ts to treat BOTH 402 and 403 as upgrade_required (match web lib/api.js). Example: `if (e instanceof ApiError && (e.status === 402 || e.status === 403) && e.code === 'upgrade_required') { ... }`.",
+    "Re-run /app/backend/tests/test_iter87_regression.py after the follow gating fix — the only failing test is TestFreeGating::test_free_follow_user_behavior and it will pass automatically."
+  ],
+  "critical_code_review_comments": [
+    "deps.require_interaction raises 403 with structured {code:'upgrade_required'} — consistent, but web/mobile need parity on the 403 branch handling (web already does, mobile does not).",
+    "follows_router.follow_org is the only community-interaction endpoint missing require_interaction(u). messaging_router, community_router (posts/comments), reviews, crew-bank etc. all gate correctly.",
+    "payments_router.payments_packages shape matches both web Pricing.jsx and mobile pricing.tsx; totals computed via package_total(pkg) = round(monthly*months*(1-discount), 2) — matches displayed /payments/packages total.",
+    "GET /boat-pros/{pro_id} returns {pro, reviews} — a wrapper, not a flat doc. If the main agent writes new tests, access viewer_hired via .pro.viewer_hired (iter87 test fixed this).",
+    "Review category validation requires ALL 4 keys {personality, skill, promptness, communication} present and 1..5. Any missing key → 400 'All categories required'. Mobile/web review forms should pre-populate all 4 inputs before submit.",
+    "Event list uses upcoming_event_predicate on ends_at (fallback starts_at) >= now_iso. System clock in this environment is already at 2026-10-03, so events dated Sept 2026 or earlier are hidden. Not a bug, but worth noting for the main agent when seeding demo events."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter87_regression.py"
+  ],
+  "success_rate": {"backend": "93% (14/15)", "frontend": "web pricing flow verified visually; mobile paywall handler flagged via code review"},
+  "test_credentials": "Admin: jenn@sailmorenow.com / [REDACTED]. Fresh FREE users minted via /api/auth/register with qa.free+<rand>@example.com / Hunter2!pass.",
+  "seed_data_creation": "~8 disposable qa.free+<rand>@example.com users created during signup + gating tests (all FREE tier, no cleanup needed — they are inert). One TEST87 Boat Pro review (created, edited, deleted). One TEST87 Dec-2026 event (created, RSVP'd, volunteered, edited, deleted). One TEST87 for_sale post (created, commented, admin-edited, admin-deleted).",
+  "retest_needed": true,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "System clock is 2026-10-03 — use December 2026 or later for new event seeds so they pass upcoming_event_predicate. /api/events accepts starts_at/ends_at (not start/end). /api/posts, /api/events are mounted at /api (no /community prefix). Message body uses `body` field, not `content`. POST /boat-pros/{id}/hire has NO JSON body — simple toggle. Review category keys: personality, skill, promptness, communication. GET /boat-pros/{id} returns {pro, reviews} wrapper. Admin content edit lives at PATCH/DELETE /api/admin/content/{entity}/{id} with entities post|discussion|comment|review|event.",
+  "rca of the issue": "Free-follow gap: follows_router.follow_org never had require_interaction added when the paid-interaction gating was rolled out — the function predates the gating layer. Low-risk fix (one line). Mobile 402-only paywall: upgrade.ts was first written when only /payments/checkout and partner event-create returned 402; when require_interaction was added later with 403, the web handler was updated (lib/api.js:20 `st === 402 || st === 403`) but the mobile helper never was. Fix is a one-line condition change."
+}

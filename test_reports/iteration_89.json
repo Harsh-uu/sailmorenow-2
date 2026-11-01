@@ -1,0 +1,56 @@
+{
+  "summary": "Iter 89 re-test after iter88 fixes. BACKEND: 9/11 pass (up from 7/11). Startup normalization in server.py is now rewriting legacy Boat-Pro categories correctly — rivercitycanvas=['Canvas'] ✅, demo-north-sound-rig=['Rigging','Sails','Canvas'] ✅, demo-harbor-shine includes 'Detailing - Exterior' ✅, /api/markets excludes ALL legacy names and includes the five new ones ✅. Per-event crew (POST/PATCH/DELETE /api/events/{id}/crew), event-create with ends_at=None, and all three free-user gates (DM/post/follow) all 200/403 as expected. REMAINING BACKEND GAPS: (1) salishmarinaservices is still ['Detailing - Exterior','Sailing Instruction'] — missing 'Diesel Engine Specialist'; the migration map only rewrites legacy keys and this listing's seed never had an engine category, so the fix needs seed_router/demo_seed to seed it with 'Diesel Engine Specialist' and/or a one-shot $set. (2) demo-wash-n-go handle is still absent from /api/boat-pros (8 pros returned, no wash-n-go) — needs a seed entry. MOBILE: The iter88 stale-preview issue is FIXED when hitting the correct URL https://boat-community-1.expo.preview.emergentagent.com/ — no 'Wake servers' banner, no CORS errors, real data loads (149 members, 8 Boat Pros, 42 events, 10 markets). NOTE the other host https://boat-community.expo.preview.emergentagent.com (without the -1) still returns the Emergent 'wake servers' iframe and is NOT a usable test target. Verified on mobile: round-logo watermark visible on hero (faint 'MORE NOW' round seal top-right of hero), legal line splits to two lines 'Free for sailors, owners & organizations' + 'Boat Pros from $19.99/mo' ✅; /register home-market shows 'Select your home market' chevron selector that opens a modal with Portland/Vancouver/Hood River/Eugene/Olympia/Tacoma/Greater Seattle/Kirkland/Everett ✅; all four account types (Sailor/Boat Owner/Boat Pro/Club-Org) show the home-market dropdown; Boat Pro plan cards show Basic ('no reviews')/Featured ('reviews, plus company logo' $19.99)/Premium ('Unlimited markets, reviews, plus photos, credentials, newsletter feature' $29.99) — reviews ARE listed on Featured & Premium ✅ but the EXACT phrase 'Reviews included' is NOT present (both on mobile & web /pricing); /new-event Start time is 30-min increment dropdown (12:00/12:30/1:00/1:30/2:00/2:30...) and End time dropdown has 'No end time' first then 30-min increments ✅; event detail (/events/{id}) shows Registration/details button and 'Join crew pool' button, Join opens FORM with position chips (Foredeck/Mast/Pit/Trimmer/Grinder/Mainsheet/Tactician/Any), experience input, notes input, 'How can organizers reach you?' radio (In-app DM only / Share my email), 'Also post to the community feed' checkbox, 'Add me to the bank' save CTA, 'Cancel' ✅; Profile Subscription shows 'Change plan' (dark bg white text) and 'Cancel subscription' (outlined) — both visible and text NOT clipped ✅. Could not toggle dark theme via localStorage (key not 'theme') — but all event-detail + subscription buttons are already visible with readable contrast in the current theme, so the 'blank-button-in-dark' bug from iter88 is not reproducible here. WEB regression: /directory shows ONLY new category names (Detailing - Exterior/Interior, Sails, Canvas, Diesel Engine Specialist) — ZERO legacy strings in page HTML; cards show correct categories (North Sound Rig & Sail='Rigging · Sails · Canvas', Harbor Shine='Detailing - Exterior · Sailing In...', Salish Marina Services='Detailing - Exterior · Sailing Ins...') ✅; /pricing + /directory hero watermark is <img src='icon-512.png' class='hidden sm:block absolute -left-20 -bottom-16 w-[360px] opacity-10 pointer-events-none select-none'> — ROUND logo bottom-LEFT at 10% opacity ✅; /pricing 'Reviews included' exact phrase NOT found on web either (same as mobile).",
+  "platforms_tested": ["web", "mobile"],
+  "backend_issues": {
+    "critical": [
+      {"endpoint": "GET /api/boat-pros", "issue": "salishmarinaservices still lacks 'Diesel Engine Specialist' (current categories=['Detailing - Exterior','Sailing Instruction']). The startup legacy->new map in server.py only rewrites docs that already contain a legacy key; this listing's seed never had 'Engine & Mechanical' so no rewrite fires. Fix: either hard-set salishmarinaservices categories in the one-shot migration ($set categories: ['Diesel Engine Specialist','Sailing Instruction']) or correct the seed_router/demo_seed definition for this handle.", "priority": "HIGH"},
+      {"endpoint": "GET /api/boat-pros", "issue": "demo-wash-n-go handle entirely absent from /api/boat-pros (API returns 8 pros, none with handle demo-wash-n-go). Needs seed insert with categories=['Detailing - Exterior'].", "priority": "HIGH"}
+    ],
+    "minor": []
+  },
+  "frontend_issues": {
+    "web": {
+      "ui_bugs": [
+        {"component": "Pricing - Boat Pros tab Premium card", "issue": "The literal phrase 'Reviews included' is NOT in the page HTML for /pricing. Reviews are mentioned in Featured ('reviews, plus company logo') and Premium ('Unlimited markets, reviews, plus photos...') bullets but not as 'Reviews included'. If the spec requires that exact phrase, update the Premium card bullet.", "selector": "[data-testid='pricing-boatpro-premium-card']", "priority": "MED"}
+      ],
+      "integration_issues": [],
+      "design_issues": []
+    },
+    "mobile": {
+      "ui_bugs": [
+        {"component": "Pricing / Register Boat Pro Premium card", "issue": "Same as web — exact phrase 'Reviews included' not present on mobile; the plan bullet says 'Unlimited markets, reviews, plus photos, credentials, newsletter feature'. Spec called for 'Reviews included' on Premium.", "testID": "register-plan-premium", "priority": "MED"}
+      ],
+      "integration_issues": [],
+      "design_issues": [],
+      "react_native_issues": []
+    }
+  },
+  "parity_issues": [
+    {"flow": "Pricing — Reviews label", "platform": "web+mobile", "issue": "Neither surface renders the exact 'Reviews included' phrase on the Boat Pro Premium card.", "expected": "Both surfaces display 'Reviews included' on Premium.", "actual": "Both surfaces list 'reviews' inside a longer features sentence instead."}
+  ],
+  "test_report_links": [
+    "/app/backend/tests/test_iter88_categories_and_crew.py",
+    "/app/test_reports/pytest/iter89_results.xml"
+  ],
+  "action_items": [
+    "BACKEND (HIGH): Add explicit per-handle override in the startup normalization (or in seed_router) so salishmarinaservices.categories ends with 'Diesel Engine Specialist' in the list. The current legacy-map approach only fires when the doc already has a legacy string.",
+    "BACKEND (HIGH): Seed the missing demo-wash-n-go boat-pro profile (categories=['Detailing - Exterior']) in seed_router/demo_seed.",
+    "COPY (MED, web+mobile): If the product requires the EXACT phrase 'Reviews included' on Boat Pro Premium, update the Premium plan card copy on /pricing (web) and on the mobile register/pricing Boat Pro card to use that phrase.",
+    "DOCS: Update test_credentials.md note that the mobile Expo preview is served at https://boat-community-1.expo.preview.emergentagent.com (with the -1); the no-dash host is a different legacy preview that redirects to the Emergent 'wake servers' page."
+  ],
+  "critical_code_review_comments": [
+    "server.py one-shot migration (lines 215-243) is well-structured and idempotent — but it's a pure legacy-key rewrite, so it cannot add a category that was never there. Any seed data-shape change (like adding Diesel to salishmarinaservices) must happen in the seed layer OR via an explicit per-handle $set in the migration.",
+    "seed_router.py / demo_seed.py seeding is idempotent and only skips existing docs, so updating a listing's category list requires either dropping the doc or an explicit update statement. Consider adding a 'seed_version' field so seeds can replay $set when they bump.",
+    "The missing demo-wash-n-go handle is not defined anywhere in /app/backend (grep for 'wash' returned 0 hits). The iter88 report assumed it should exist — either (a) add it to demo_seed, or (b) update the iter88 test file to drop the wash-n-go assertion if it's not an intended profile.",
+    "/app/mobile/.env EXPO_PACKAGER_PROXY_URL correctly points at the -1 preview; the un-prefixed host (boat-community.expo.preview.emergentagent.com) is a different, stale preview. This should be flagged in docs because trailing confusion will recur.",
+    "Dark-mode theme storage key is NOT 'theme' in localStorage (LS_KEYS was [] after setting theme), so pre-seeding dark via playwright is non-trivial. Add a URL query like ?theme=dark or a stable storage key to make dark-mode QA easier."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "82% (9/11) — same 2 Boat Pros seed-data gaps remain", "frontend": "Web pricing+directory PASS (categories, watermark); mobile hero watermark + legal line + register home-market dropdown + /new-event 30-min dropdowns + 'No end time' + crew-bank form + profile Change/Cancel buttons ALL PASS. 'Reviews included' exact phrase missing on both surfaces."},
+  "test_credentials": "Admin: jenn@sailmorenow.com / [REDACTED]. Register payload: {email, password, first_name, last_name, account_type in {sailor,boat_owner,boat_pro,partner}, primary_market, agreed_to_guidelines:true}.",
+  "seed_data_creation": "Created temporary qa.free+* and qa.paid+* users (and upgraded paid to premium via mongosh). Created+deleted 2 TEST88 Dec-2026 events. All data created in tests is deleted at teardown.",
+  "retest_needed": true,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Mobile preview MUST be hit at https://boat-community-1.expo.preview.emergentagent.com (with -1); the no-dash host serves the Emergent 'wake servers' redirect page. iter88 category migration is now in server.py startup — it only rewrites legacy strings; any required ADDITION (salish Diesel) or missing seed (demo-wash-n-go) must be done at the seed layer. Run /app/backend/tests/test_iter88_categories_and_crew.py after any seed/migration change — the 2 failing tests are TestBoatProMigration::test_salish_marina_has_diesel and TestBoatProMigration::test_wash_n_go_and_harbor_shine_exterior_detailing (wash-n-go half). All other iter88 regressions (per-event crew, optional ends_at, free gating, new category names in /api/markets, rivercitycanvas, north-sound-rig, harbor-shine Detailing-Exterior) are GREEN.",
+  "rca of the issue": "Both remaining failures are seed-data gaps, not code bugs. (1) salishmarinaservices was seeded as a detailing + instruction business and the iter88 spec added a 'Diesel Engine Specialist' requirement for it; the server-side migration cannot infer that because the listing never contained a legacy 'Engine & Mechanical' token. Fix is an explicit per-handle $addToSet in a one-time migration or an update in seed_router/demo_seed. (2) demo-wash-n-go is simply not defined in seed_router.py or demo_seed.py (grep for 'wash' returns nothing); the iter88 spec expects this handle to exist. Add a seed entry: handle='demo-wash-n-go', categories=['Detailing - Exterior'] with an appropriate business_name and user."
+}

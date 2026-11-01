@@ -1,0 +1,47 @@
+{
+  "summary": "iter39 re-retest of the 4 iter37 fixes, run fresh (--cache-clear, no cached artifacts, backend confirmed RUNNING). Verified file contents on disk first, then executed 23 pytest tests (20 in updated test_iter37_phase_q.py + 2 new in-process prune tests + 1 WS read test) and 4 live browser checks against the public URL. ALL 4 FIXES CONFIRMED WORKING. iter38's report was indeed inaccurate.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "Directory/ProCard", "issue": "Invalid HTML nesting: the pro-handle <Link> (<a href=/u/:handle>) is rendered inside the pro-card <Link> (<a href=/directory/:id>). React logs 'In HTML, <a> cannot be a descendant of <a> ... will cause a hydration error' on every Directory render. Functionally the stopPropagation click still works, but nested anchors are invalid and risk hydration mismatches. Suggest making the card a div with onClick/navigate, or moving the handle link outside the card anchor.", "selector": "[data-testid^=\"pro-handle-\"]", "priority": "MEDIUM"}
+    ],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "verified_fixes": [
+    "messaging_router: 3 x thread.get('participants') hits (list_messages L43, mark_thread_read L59, broadcast branch L68). Backend test with dm_threads doc {thread_id:'test-user-t1-a-test-user-t1-b', participants:[dashed ids]} -> GET /api/messages/{tid} = 200 with history, POST /{tid}/read = 200 marked=1. Non-participant on an existing thread still correctly 403 (both GET and POST).",
+    "directory_router /api/contact: throttle now AFTER validation (L117-130), hits.append at L149-150 after send_email. HTTP test: 3x400 invalid then valid submission -> 200 (was 429); only 1 row persisted. 3 valid -> 200,200,200, 4th -> 429; different IP not throttled. In-process unit test: _CONTACT_RATE['9.9.9.9']=[0.0] is pruned on the next request; 4 invalid payloads record zero hits.",
+    "Messages.jsx: 2 x '/read' hits (loadMessages L34, WS handler L47). Live browser: recipient opening thread with 2 unread inbound msgs fired POST /api/messages/{tid}/read; with the thread open, a WS-delivered inbound message rendered and fired /read again; sender's bubble flipped receipt-sent-<id> -> receipt-read-<id> live via WS message.read after the peer marked read.",
+    "Directory.jsx L47: computed color of pro-handle is rgb(226,232,240) (text-slate-200) on the premium card and rgb(100,116,139) (text-slate-500) on featured/basic cards — matches the fix; contrast is acceptable on both."
+  ],
+  "test_report_links": [
+    "/app/backend/tests/test_iter37_phase_q.py",
+    "/app/backend/tests/test_iter39_contact_prune.py",
+    "/app/backend/tests/seed_iter39_ui.py",
+    "/app/test_reports/pytest/iter39_phase_q.xml"
+  ],
+  "action_items": [
+    "Optional (MEDIUM): fix nested-anchor hydration warning in Directory ProCard (pro-handle Link inside card Link).",
+    "No action needed on the 4 iter37/iter39 fixes — all verified passing."
+  ],
+  "critical_code_review_comments": [
+    "mark_thread_read recomputes `parts` twice (L59 and L68) — harmless but redundant; the L68 line can be deleted.",
+    "current_user_from_token resolves the session_token cookie ahead of the Authorization header. Not a bug, but test scripts must clear browser cookies when impersonating a second user via page.request (caused a false negative in my first browser run).",
+    "_CONTACT_RATE is per-process in-memory; with multiple backend workers the 3/10min quota is per-worker. Acceptable for now, worth noting."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter37_phase_q.py",
+    "/app/backend/tests/test_iter39_contact_prune.py",
+    "/app/backend/tests/seed_iter39_ui.py"
+  ],
+  "success_rate": {"backend": "100% (23/23)", "frontend": "100% (4/4 checks)"},
+  "seed_data_creation": "Created users test-user-t1-a / test-user-t1-b (dashed user_ids) with sessions test_sess_iter39_a/b, a dm_thread + 2 unread inbound msgs. All seeded users, sessions, messages, threads, notifications and TEST_iter39 contact rows were deleted after testing.",
+  "should_call_test_agent_after_fix": false,
+  "should_main_agent_self_test": true,
+  "test_credentials": "Emergent Google OAuth; sessions minted directly in Mongo per /app/auth_testing.md (seed script: /app/backend/tests/seed_iter39_ui.py).",
+  "context_for_next_testing_agent": "test_iter37_phase_q.py now asserts the CORRECT post-fix behaviour: TestContactRateLimit::test_invalid_submissions_do_not_consume_quota expects 200 after 3x400, and TestReadReceipts has test_dashed_user_id_participant_allowed (inserts dm_threads doc, expects 200) plus test_non_participant_on_existing_thread_403. Use a unique X-Forwarded-For per contact rate-limit test. For two-user browser tests, clear cookies before using page.request with a different bearer token (cookie wins over header). Only open item: nested <a> hydration warning on Directory cards.",
+  "rca_of_the_issue": "N/A — no failures. iter38's false negative was most likely caused by relying on cached pytest/report artifacts; this run used --cache-clear and re-read all source files before testing."
+}

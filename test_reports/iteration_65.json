@@ -1,0 +1,32 @@
+{
+  "summary": "Frontend-only mobile RETEST of the iteration_64 HIGH bug (Crew Bank default market). Bug is NOT FIXED. On /crew-bank as PREMIUM seed_marina (primary_market='Greater Seattle') the active chip is still 'crew-market-all' (dark-navy rgb(31,63,91)) instead of 'crew-market-Greater Seattle'. Reproduced twice: (a) fresh navigation with pre-seeded session_token, waited 3s for auth to hydrate — 'All markets' active; (b) full page reload waited 4s — same result. Auth is definitely resolved by then (the 'List yourself as available crew' premium CTA renders, which requires user.primary_role='boat_pro' Premium from the backend response). Regression items all PASS: chip switching filters both sections correctly (Portland/Vancouver=1 open, Bellingham=0, Greater Seattle=0, All=1); self-listing modal opens via list-myself-cta; Profile Appearance toggle persists (theme-dark → smn-theme-pref='dark', theme-light → 'light'). RCA: the new effect at /app/mobile/app/crew-bank.tsx:28-30 `if (market === null) setMarket(user?.primary_market || 'all')` fires immediately after the first render when `user` is still null (AuthContext hydrates asynchronously from AsyncStorage). Because the fallback resolves to 'all' during that first null-user tick, market is set to 'all' and the guard `market === null` prevents any subsequent user-resolution from correcting it. The `[user, market]` dep re-runs but skips because market is no longer null.",
+  "platforms_tested": ["mobile"],
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "mobile": {
+      "ui_bugs": [
+        {"component": "CrewBank default market chip", "issue": "Default active chip is 'crew-market-all' instead of the user's primary_market ('Greater Seattle' for seed_marina). The iteration_64 fix is incomplete — the seeding effect fires before AuthContext hydrates user, so `user?.primary_market || 'all'` immediately falls through to 'all' and the `market === null` guard then blocks re-seeding when user later resolves.", "testID": "crew-market-Greater Seattle", "priority": "HIGH"}
+      ],
+      "integration_issues": [],
+      "design_issues": [],
+      "react_native_issues": []
+    }
+  },
+  "parity_issues": [],
+  "test_report_links": [],
+  "action_items": [
+    "Re-fix /app/mobile/app/crew-bank.tsx:28-30. The seeding effect must WAIT until user is actually hydrated, not just until it becomes truthy after the market has already been set to 'all'. Two clean options: (a) `useEffect(() => { if (market === null && user) setMarket(user.primary_market || 'all'); }, [user, market]);` — only seeds once user is truthy, so market stays null (and load() stays gated) during auth hydration; add a companion effect or use an AuthContext `loading`/`ready` flag so unauthenticated users still get 'all' after redirect. (b) Better: expose an `authReady` / `loading` boolean from useAuth and gate on `if (market === null && !loading) setMarket(user?.primary_market || 'all')`. Either way, add a Loading state until market != null (already gated at line 38 and 77) so the user never sees the wrong active chip flash. Verify by loading /crew-bank cold as seed_marina and confirming crew-market-Greater Seattle is the ACTIVE (rgb(31,63,91)) chip on first paint, plus 0 open cards in the Open section."
+  ],
+  "critical_code_review_comments": [
+    "The `market === null` guard alone isn't sufficient — it must be combined with a check that user resolution has happened. Otherwise the effect races AuthContext's async hydrate and locks to the fallback.",
+    "Chip filter, self-listing CRUD, and theme toggle logic are all solid — no other regressions detected."
+  ],
+  "updated_files": [],
+  "success_rate": {"frontend": "75% (same HIGH default-market bug persists after fix; all other regression items pass)"},
+  "test_credentials": "Minted for pro.marina@sailmorenow.dev (seed_marina, Greater Seattle, Premium): test_session_mobile_1789101516981 (7d)",
+  "seed_data_creation": "Inserted 1 user_sessions row for seed_marina.",
+  "retest_needed": true,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Bug: Crew Bank default market chip. Fix attempt in iteration_64→65 used `useState<string|null>(null)` + `useEffect(if market===null → setMarket(user?.primary_market||'all'))` but the effect races AuthContext hydration and locks to 'all'. After re-fix, verify by loading /crew-bank as seed_marina (token in test_credentials) and asserting crew-market-Greater Seattle chip has bg=rgb(31,63,91). Chip switching / self-listing modal / Profile theme toggle are confirmed working — don't need to re-test unless the re-fix touches them.",
+  "rca of the issue": "AuthContext hydrates `user` asynchronously from AsyncStorage. On the first render of CrewBank, market=null AND user=null. The seeding useEffect fires after that first render and sees `market === null` true → runs `setMarket(user?.primary_market || 'all')`. Because user is still null at that instant, `user?.primary_market` is undefined and the fallback 'all' is used. Now market='all'. When user later resolves to seed_marina, the same effect re-runs (dep array [user, market]) but is short-circuited by `market === null` being false. Result: market is permanently 'all'. Reproduced with 3s and 4s post-load waits and with post-reload settling — the CTA and profile requests both fire successfully proving user is resolved, but market stays 'all'. Correct fix: gate seeding on user resolution (either `if (market === null && user)` combined with an auth-ready flag for unauth users, or `if (market === null && !authLoading)`)."
+}
