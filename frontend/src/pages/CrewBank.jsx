@@ -35,6 +35,15 @@ export default function CrewBank() {
   const [busy, setBusy] = useState(false);
   const [selected, setSelected] = useState(null);
   const [verifiedOnly, setVerifiedOnly] = useState(false);
+  // Show "My Crew Listings" only when the user has at least one per-event crew
+  // sign-up (a standalone-only listing is managed from the card below).
+  const [hasEventListing, setHasEventListing] = useState(false);
+  useEffect(() => {
+    if (!user) { setHasEventListing(false); return; }
+    api.get("/crew-bank/mine")
+      .then(({ data }) => setHasEventListing((data.listings || []).some((l) => l.kind === "event")))
+      .catch(() => {});
+  }, [user]);
 
   useEffect(() => { api.get("/markets").then(({ data }) => { setMarkets(data.markets); setExpTypesList(data.experience_types || []); setStyleAxes(data.sailing_style_axes || []); }).catch(() => {}); }, []);
   useEffect(() => { api.get("/crew-positions").then(({ data }) => setPositionsList(data.positions || [])).catch(() => {}); }, []);
@@ -158,18 +167,26 @@ export default function CrewBank() {
           <p className="mt-2 text-slate-600 max-w-2xl">Available crew looking for boats to sail or race, outside of any single event. Listings run for 90 days and can be refreshed any time.</p>
           <Link to="/community?type=sailing_opportunity" data-testid="crew-sailing-opps-link"
                 className="mt-3 inline-block text-sm font-semibold text-[#55B3AD] hover:underline">
-            Looking for a boat? See Sailing Opportunities
+            Looking for a boat? Click here to see Sailing Opportunities
           </Link>
         </div>
-        <div className="flex items-center gap-2 flex-wrap">
-          <Link to="/my-crew-listings" data-testid="crewbank-my-crew-listings-link"
-                className="inline-flex items-center gap-2 border-2 border-[#1F3F5B] text-[#1F3F5B] rounded-full px-4 py-2 text-sm font-semibold hover:bg-[#1F3F5B]/5">
-            <Icon name="layout-list" tone="current" className="h-4 w-4" /> My Crew Listings
+        <div className="flex flex-col items-stretch sm:items-end gap-2">
+          <div className="flex items-center gap-2 flex-wrap sm:justify-end">
+            {hasEventListing && (
+              <Link to="/my-crew-listings" data-testid="crewbank-my-crew-listings-link"
+                    className="inline-flex items-center gap-2 border-2 border-[#1F3F5B] text-[#1F3F5B] rounded-full px-4 py-2 text-sm font-semibold hover:bg-[#1F3F5B]/5">
+                <Icon name="layout-list" tone="current" className="h-4 w-4" /> My Crew Listings
+              </Link>
+            )}
+            <button onClick={openForm} data-testid="list-yourself-btn"
+                    className="inline-flex items-center gap-2 bg-[#F2A03B] hover:bg-[#d98c30] text-white rounded-full px-5 py-2.5 font-semibold shadow-sm">
+              <Icon name="add" tone="current" className="h-4 w-4" /> {mine ? "Edit my listing" : "List yourself"}
+            </button>
+          </div>
+          <Link to="/community?compose=1" data-testid="crewbank-add-opportunity-btn"
+                className="inline-flex items-center justify-center gap-2 border-2 border-[#55B3AD] text-[#1F3F5B] rounded-full px-4 py-2 text-sm font-semibold hover:bg-[#55B3AD]/10">
+            <Icon name="add" tone="current" className="h-4 w-4" /> Add a sailing opportunity
           </Link>
-          <button onClick={openForm} data-testid="list-yourself-btn"
-                  className="inline-flex items-center gap-2 bg-[#F2A03B] hover:bg-[#d98c30] text-white rounded-full px-5 py-2.5 font-semibold shadow-sm">
-            <Icon name="add" tone="current" className="h-4 w-4" /> {mine ? "Edit my listing" : "List yourself"}
-          </button>
         </div>
       </div>
 

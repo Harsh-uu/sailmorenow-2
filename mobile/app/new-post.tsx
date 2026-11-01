@@ -16,7 +16,7 @@ import { MARKETPLACE_CHANGED, CONTENT_CHANGED } from "@/src/lib/events";
 
 const TYPES = [
   { key: "general", label: "Discussion" },
-  { key: "sailing_opportunity", label: "Crew / Opportunity" },
+  { key: "sailing_opportunity", label: "Sailing opportunity" },
   { key: "question", label: "Question" },
   { key: "for_sale", label: "For sale" },
 ];
@@ -46,9 +46,9 @@ export default function NewPost() {
     api.get<{ markets: string[] }>("/markets").then((d) => setMarkets(d.markets || [])).catch(() => {});
   }, []);
 
-  // Deep link from the Feed/Marketplace "Add listing" actions preselects For sale.
+  // Deep link from the Feed/Marketplace/Crew Bank "Add" actions preselects the type.
   useEffect(() => {
-    if (!editId && typeParam === "for_sale") setType("for_sale");
+    if (!editId && typeParam && TYPES.some((t) => t.key === typeParam)) setType(typeParam);
   }, [editId, typeParam]);
 
   // Edit mode: prefill from the existing post. Only body and photo are editable;

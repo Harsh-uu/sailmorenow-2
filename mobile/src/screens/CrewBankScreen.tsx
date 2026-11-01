@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { Icon } from "@/src/components/Icon";
-import { Alert, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Alert, Modal, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
 import { router, useFocusEffect } from "expo-router";
 
 import { Screen } from "@/src/components/Screen";
@@ -34,6 +34,8 @@ export default function CrewBank() {
   const [refreshing, setRefreshing] = useState(false);
   const [selected, setSelected] = useState<any>(null);
   const [verifiedOnly, setVerifiedOnly] = useState(false);
+  const [hasEventListing, setHasEventListing] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
 
   const crewMissing = mine ? [
     !mine.availability && "your availability",
@@ -58,6 +60,9 @@ export default function CrewBank() {
     setCanList(!!s.can_list_yourself);
     const meEntry = m?.entry || m;
     setMine(meEntry && meEntry.user_id ? meEntry : null);
+    api.get<any>("/crew-bank/mine")
+      .then((r) => setHasEventListing(((r?.listings) || []).some((l: any) => l.kind === "event")))
+      .catch(() => {});
     setLoading(false);
   }, [market, user, verifiedOnly]);
 
@@ -92,11 +97,9 @@ export default function CrewBank() {
       showBack
       padded={false}
       right={
-        canList ? (
-          <Pressable testID="list-myself-btn" onPress={() => router.push("/crew-listing")} hitSlop={8}>
-            <Icon name={mine ? "create-outline" : "add-circle-outline"} size={24} color={colors.onBrandPrimary}  footprint={24}/>
-          </Pressable>
-        ) : null
+        <Pressable testID="crewbank-add-menu-btn" onPress={() => setMenuOpen(true)} hitSlop={8}>
+          <Icon name="add-circle-outline" size={24} color={colors.onBrandPrimary} footprint={24} />
+        </Pressable>
       }
     >
       {loading ? (
@@ -105,10 +108,12 @@ export default function CrewBank() {
         <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 40 }} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.teal} />}>
           <Text style={[styles.lead, { color: colors.onSurface }]}>Find crew or get on the water.</Text>
           <Pressable testID="crew-sailing-opps-link" onPress={() => router.navigate({ pathname: "/(tabs)/feed", params: { filter: "sailing" } })} hitSlop={6} style={{ alignSelf: "flex-start", marginBottom: 14 }}>
-            <Text style={{ color: colors.teal, fontWeight: "700", fontSize: 14 }}>Looking for a boat? See Sailing Opportunities</Text>
+            <Text style={{ color: colors.teal, fontWeight: "700", fontSize: 14 }} maxFontSizeMultiplier={1.4}>Looking for a boat? Click here to see Sailing Opportunities</Text>
           </Pressable>
 
-          <Button title="My Crew Listings" variant="secondary" icon="list-outline" onPress={() => router.push("/my-crew-listings" as any)} testID="crewbank-my-crew-listings-btn" style={{ marginBottom: 14, height: 44 }} />
+          {hasEventListing ? (
+            <Button title="My Crew Listings" variant="secondary" icon="list-outline" onPress={() => router.push("/my-crew-listings" as any)} testID="crewbank-my-crew-listings-btn" style={{ marginBottom: 14, height: 44 }} />
+          ) : null}
 
           {/* Self-listing CTA */}
           {mine ? (
@@ -145,6 +150,12 @@ export default function CrewBank() {
               <Icon name="chevron-forward" size={20} color={colors.borderStrong}  footprint={20}/>
             </Pressable>
           )}
+
+          <Pressable testID="crewbank-add-opportunity-row" onPress={() => router.push("/new-post?type=sailing_opportunity")} style={[styles.mineCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+            <Icon name="boatOwner" size={20} color={colors.accent} footprint={20} />
+            <Text style={{ flex: 1, color: colors.onSurface, fontWeight: "700" }} numberOfLines={2} maxFontSizeMultiplier={1.3}>Add a sailing opportunity</Text>
+            <Icon name="chevron-forward" size={20} color={colors.borderStrong} footprint={20} />
+          </Pressable>
 
           {mine && crewMissing.length > 0 ? (
             <Pressable testID="crew-completeness-hint" onPress={() => router.push("/crew-listing")} style={styles.hint}>
@@ -199,6 +210,26 @@ export default function CrewBank() {
       )}
 
       <CrewListingPopup visible={!!selected} entry={selected} onClose={() => setSelected(null)} />
+
+      <Modal visible={menuOpen} transparent animationType="fade" onRequestClose={() => setMenuOpen(false)}>
+        <Pressable style={styles.menuBackdrop} onPress={() => setMenuOpen(false)} testID="crewbank-menu-backdrop">
+          <Pressable style={[styles.menuCard, { backgroundColor: colors.surface }]} onPress={(e) => e.stopPropagation()}>
+            <Text style={[styles.menuTitle, { color: colors.onSurfaceSecondary }]} maxFontSizeMultiplier={1.3}>Add to Crew Bank</Text>
+            <Pressable testID="menu-add-opportunity" onPress={() => { setMenuOpen(false); router.push("/new-post?type=sailing_opportunity"); }}
+              style={[styles.menuRow, { borderColor: colors.border }]}>
+              <Icon name="boatOwner" size={22} color={colors.accent} footprint={22} />
+              <Text style={{ flex: 1, color: colors.onSurface, fontWeight: "700", fontSize: 15 }} numberOfLines={2} maxFontSizeMultiplier={1.3}>Add a sailing opportunity</Text>
+              <Icon name="chevron-forward" size={20} color={colors.borderStrong} footprint={20} />
+            </Pressable>
+            <Pressable testID="menu-list-yourself" onPress={() => { setMenuOpen(false); router.push(canList ? "/crew-listing" : "/pricing"); }}
+              style={[styles.menuRow, { borderColor: colors.border }]}>
+              <Icon name="people-outline" size={22} color={colors.accent} footprint={22} />
+              <Text style={{ flex: 1, color: colors.onSurface, fontWeight: "700", fontSize: 15 }} numberOfLines={2} maxFontSizeMultiplier={1.3}>List yourself as available crew</Text>
+              <Icon name="chevron-forward" size={20} color={colors.borderStrong} footprint={20} />
+            </Pressable>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </Screen>
   );
 }
@@ -211,4 +242,8 @@ const styles = StyleSheet.create({
   mineCardCol: { borderRadius: 16, borderWidth: 1, padding: 14, marginBottom: 16 },
   hint: { flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: "#FEF3C7", borderColor: "#FCD34D", borderWidth: 1, borderRadius: 14, padding: 12, marginBottom: 16 },
   hintText: { flex: 1, fontSize: 13, lineHeight: 18, color: "#92400E", fontWeight: "600" },
+  menuBackdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.4)", justifyContent: "center", padding: 24 },
+  menuCard: { borderRadius: 18, padding: 10, gap: 8 },
+  menuTitle: { fontSize: 11, fontWeight: "800", letterSpacing: 1, textTransform: "uppercase", paddingHorizontal: 8, paddingTop: 6 },
+  menuRow: { flexDirection: "row", alignItems: "center", gap: 12, borderWidth: 1, borderRadius: 14, padding: 14 },
 });

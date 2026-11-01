@@ -109,6 +109,18 @@ export default function Feed({ lockType = null }) {
   useEffect(() => {
     api.get("/searches/suggestions").then(({ data }) => setTrending(data.suggestions || [])).catch(() => {});
   }, []);
+  // Deep link from Crew Bank's "Add a sailing opportunity": open the existing
+  // composer with the type preselected (draft defaults to sailing_opportunity).
+  const composeHandled = useRef(false);
+  useEffect(() => {
+    if (composeHandled.current || !user) return;
+    if (sp.get("compose") === "1" && !lockType) {
+      composeHandled.current = true;
+      if (isFreeIndividual(user)) { promptUpgrade("Upgrade to post to the community feed"); return; }
+      setDraft((d) => ({ ...d, type: qType || "sailing_opportunity", identity: user.active_identity || "personal" }));
+      setCreating(true);
+    }
+  }, [user]); // eslint-disable-line react-hooks/exhaustive-deps
   const load = () => {
     setLoading(true);
     const params = { market, type: (lockType || type) || undefined };

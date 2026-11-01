@@ -1,5 +1,19 @@
 # Sail More Now
 
+## Changelog - Jun 2026 (CREWBANK-OPP-2: add a sailing opportunity from Crew Bank; web + mobile)
+No testing agent. No publish. No schema change. No data touched (only code; a temp DB user+session was created for web screenshots and deleted, zero residue). No backup/undo needed (no migration). Mobile is JS only and NOT device-tested; web verified live in-browser.
+PART A built:
+- Link text (web CrewBank.jsx + mobile CrewBankScreen.tsx): "Looking for a boat? See Sailing Opportunities" -> "Looking for a boat? Click here to see Sailing Opportunities" (still a link, same destination).
+- Web Crew Bank: added "Add a sailing opportunity" button directly below My Crew Listings / List yourself; links to /community?compose=1. Feed.jsx now auto-opens the EXISTING composer (unchanged) on ?compose=1 with type preselected (draft already defaults to sailing_opportunity); free individuals get the existing upgrade prompt.
+- Mobile Crew Bank: (a) added an "Add a sailing opportunity" row below the List-yourself/upgrade block, styled like the list-yourself card, using the existing boatOwner (MaterialCommunityIcons sail-boat) icon tinted orange (colors.accent), shown to all users; (b) the top-right plus now opens a two-choice menu (Add a sailing opportunity / List yourself as available crew) and is always visible (was gated to paid users before - NOTE: contradicts the brief's "already visible to free users"; made it always visible to meet the requirement). Free users choosing List yourself get the existing upgrade route (/pricing). Labels wrap to two lines + capped font scaling (MOBILE-FIX-1 patterns).
+- Mobile New post type chip "Crew / Opportunity" -> "Sailing opportunity"; preselect generalized so ?type=sailing_opportunity (and any valid type) preselects.
+- My Crew Listings button (web + mobile Crew Bank): shown only when the user has >=1 per-event crew listing (GET /crew-bank/mine, kind=="event"); hidden for none or standalone-only. Confirmed standalone-only users still view/edit from the "your listing" card on both platforms.
+- After publish (unchanged): WEB lands on the /community Community feed (existing composer behavior, no redirect added); MOBILE returns to Crew Bank via existing router.back(). Posting from the Hub is unchanged on both.
+Verified LIVE (web, temp premium user, cookie session): add button below List yourself at 1440/820/390 and light+dark; My Crew Listings hidden for a no-event user; composer deep-link opens with "Sailing opportunity" preselected. Mobile: Metro bundles clean (1767 web / 2210 iOS modules); code-only, not device-tested.
+PARTS B and C: report only, delivered in chat, no code changed. Awaiting go before any Part B change.
+
+
+
 ## Changelog - Jun 2026 (MOBILE-FIX-1: Android Large-font / 3-button-nav layout fixes; mobile Expo only)
 Mobile only. No testing agent. No em dashes. JS/TS only (no app.json / native change), so the fixes appear on a normal Expo Go reload, no rebuild needed. Could NOT verify on a real Android device (none available); the Expo web preview runs at font-scale 1 with no system nav bar so it cannot reproduce "Display size Large" or the 3-button nav. Verified: Metro bundles clean (1774 modules). The tsc warnings seen are all pre-existing project noise (Icon color prop typing on unchanged tabBarIcon lines, Pro[]|null FlatList data, EventMap module resolution, User.logo_url), none from these edits.
 CHANGES:
