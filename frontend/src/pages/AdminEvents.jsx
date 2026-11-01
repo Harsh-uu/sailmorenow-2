@@ -4,7 +4,7 @@ import { useNavigate } from "react-router-dom";
 import { api } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
 import { toast } from "sonner";
-import { EVENT_CATEGORIES, categoryMeta, formatEventDate, ptInputToISO, isoToPTInput } from "@/lib/eventCategories";
+import { EVENT_CATEGORIES, categoryMeta, formatEventDate, ptInputToISO, isoToPTInput, eventTitleParts } from "@/lib/eventCategories";
 import FlyerUploader from "@/components/FlyerUploader";
 
 export default function AdminEvents() {
@@ -26,8 +26,69 @@ export default function AdminEvents() {
   const [bulkName, setBulkName] = useState("");
   const [bulkEmail, setBulkEmail] = useState("");
   const [bulkBusy, setBulkBusy] = useState(false);
+  const [bulkActionBusy, setBulkActionBusy] = useState("");
+  const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
+  const [showDeleted, setShowDeleted] = useState(false);
+  const [deletedList, setDeletedList] = useState([]);
+  const [deletedBusy, setDeletedBusy] = useState(false);
+  const [restoringId, setRestoringId] = useState(null);
 
   const toggleSel = (id) => setSelectedIds((prev) => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
+
+  const bulkDelete = async () => {
+    setBulkActionBusy("delete");
+    try {
+      const { data } = await api.post("/admin/events/bulk-delete", { event_ids: [...selectedIds] });
+      toast.success(`Deleted ${data.deleted} event${data.deleted === 1 ? "" : "s"}. You can restore from Deleted events.`);
+      setConfirmBulkDelete(false);
+      setSelectedIds(new Set());
+      await refreshEvents();
+    } catch (e) { toast.error(e?.response?.data?.detail || "Bulk delete failed"); }
+    finally { setBulkActionBusy(""); }
+  };
+
+  const bulkReview = async () => {
+    setBulkActionBusy("review");
+    try {
+      const { data } = await api.post("/admin/events/bulk-review", { event_ids: [...selectedIds] });
+      toast.success(`Marked ${data.updated} event${data.updated === 1 ? "" : "s"} reviewed`);
+      setSelectedIds(new Set());
+      await refreshEvents();
+    } catch (e) { toast.error(e?.response?.data?.detail || "Mark reviewed failed"); }
+    finally { setBulkActionBusy(""); }
+  };
+
+  const confirmEvents = async (ids) => {
+    const list = [...ids];
+    setBulkActionBusy("confirm");
+    try {
+      const { data } = await api.post("/admin/events/confirm", { event_ids: list });
+      toast.success(`Confirmed ${data.confirmed} event${data.confirmed === 1 ? "" : "s"}. The Tentative tag is removed and locked against re-import.`);
+      if (list.length > 1) setSelectedIds(new Set());
+      await refreshEvents();
+    } catch (e) { toast.error(e?.response?.data?.detail || "Confirm failed"); }
+    finally { setBulkActionBusy(""); }
+  };
+
+  const loadDeleted = async () => {
+    setDeletedBusy(true);
+    try { const { data } = await api.get("/admin/events/deleted"); setDeletedList(data.events || []); }
+    catch { toast.error("Couldn't load deleted events"); }
+    finally { setDeletedBusy(false); }
+  };
+
+  const openDeleted = async () => { setShowDeleted(true); await loadDeleted(); };
+
+  const restoreEvent = async (id) => {
+    setRestoringId(id);
+    try {
+      await api.post(`/admin/events/${id}/restore`);
+      toast.success("Event restored");
+      setDeletedList((list) => list.filter((d) => d.id !== id));
+      await refreshEvents();
+    } catch (e) { toast.error(e?.response?.data?.detail || "Restore failed"); }
+    finally { setRestoringId(null); }
+  };
 
   const refreshEvents = async () => {
     const { data } = await api.get("/admin/events");
@@ -36,8 +97,8 @@ export default function AdminEvents() {
 
   const doDelete = async (ev) => {
     try {
-      await api.delete(`/admin/content/event/${ev.id}`);
-      toast.success(ev.source === "aggregator" ? "Event deleted. It won't be re-imported." : "Event deleted");
+      await api.post("/admin/events/bulk-delete", { event_ids: [ev.id] });
+      toast.success("Event deleted. You can restore it from Deleted events.");
       setDeleting(null);
       setEvents((list) => list.filter((e) => e.id !== ev.id));
     } catch (e) { toast.error(e?.response?.data?.detail || "Couldn't delete"); }
@@ -79,6 +140,20 @@ export default function AdminEvents() {
       setDrafts(d);
     }).catch((e) => setError(e?.response?.data?.detail || "Failed to load"));
   }, [user, loading, nav]);
+
+  // EVENTS-ADMIN-BULK-1 item 4: scroll-lock safety net. A modal elsewhere in the
+  // app can leave document.body locked (overflow hidden / pointer-events none);
+  // if the admin lands here unable to scroll, clear any stray lock on mount and
+  // whenever none of this page's own modals are open.
+  useEffect(() => {
+    const anyModalOpen = editing || deleting || confirmBulkDelete || showDeleted;
+    if (anyModalOpen) return;
+    const b = document.body.style;
+    if (b.overflow === "hidden") b.overflow = "";
+    if (b.position === "fixed") b.position = "";
+    if (b.pointerEvents === "none") b.pointerEvents = "";
+    document.documentElement.style.overflow = "";
+  }, [editing, deleting, confirmBulkDelete, showDeleted]);
 
   const markets = useMemo(() => Array.from(new Set(events.map((e) => e.market).filter(Boolean))).sort(), [events]);
   const sources = useMemo(() => Array.from(new Set(events.map((e) => e.source || "community").filter(Boolean))).sort(), [events]);
@@ -163,24 +238,48 @@ export default function AdminEvents() {
                 className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-bold border border-red-300 text-red-600 hover:bg-red-50">
           <Icon name="mail" tone="current" className="h-3.5 w-3.5" /> Select missing contact {missingContactCount > 0 && <span className="inline-flex items-center justify-center min-w-[18px] h-[18px] rounded-full text-[10px] px-1 bg-red-500 text-white">{missingContactCount}</span>}
         </button>
+        <button onClick={openDeleted} data-testid="open-deleted-events"
+                className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-bold border border-slate-300 text-slate-600 hover:bg-slate-50">
+          <Icon name="trash" tone="current" className="h-3.5 w-3.5" /> Deleted events
+        </button>
       </div>
 
       <div className="mt-4 space-y-4">
         {selectedIds.size > 0 && (
-          <div className="sticky top-2 z-10 bg-[#1F3F5B] text-white rounded-2xl p-4 shadow-lg flex flex-col sm:flex-row sm:items-center gap-3" data-testid="bulk-bar">
-            <div className="text-sm font-bold whitespace-nowrap">{selectedIds.size} selected</div>
-            <input value={bulkName} onChange={(e) => setBulkName(e.target.value)} data-testid="bulk-organizer-name" placeholder="Organizer name"
-                   className="flex-1 min-w-0 rounded-full border-0 px-3 py-2 text-sm text-[#1F3F5B]" />
-            <input value={bulkEmail} onChange={(e) => setBulkEmail(e.target.value)} data-testid="bulk-organizer-email" placeholder="RSVP contact email" type="email"
-                   className="flex-1 min-w-0 rounded-full border-0 px-3 py-2 text-sm text-[#1F3F5B]" />
-            <button onClick={applyBulk} disabled={bulkBusy} data-testid="bulk-apply"
-                    className="rounded-full bg-[#F2A03B] hover:bg-[#d98c30] disabled:opacity-50 px-5 py-2 text-sm font-bold whitespace-nowrap">{bulkBusy ? "Applying…" : "Apply to selected"}</button>
-            <button onClick={() => setSelectedIds(new Set())} className="text-white/70 hover:text-white text-sm">Clear</button>
+          <div className="sticky top-2 z-10 bg-[#1F3F5B] text-white rounded-2xl p-4 shadow-lg flex flex-col gap-3" data-testid="bulk-bar">
+            <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 flex-wrap">
+              <div className="text-sm font-bold whitespace-nowrap">{selectedIds.size} selected</div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <button onClick={() => setConfirmBulkDelete(true)} disabled={!!bulkActionBusy} data-testid="bulk-delete"
+                        className="inline-flex items-center gap-1.5 rounded-full bg-red-600 hover:bg-red-700 disabled:opacity-50 px-4 py-2 text-sm font-bold">
+                  <Icon name="trash" tone="current" className="h-4 w-4" /> Delete selected
+                </button>
+                <button onClick={bulkReview} disabled={!!bulkActionBusy} data-testid="bulk-review"
+                        className="inline-flex items-center gap-1.5 rounded-full bg-white/15 hover:bg-white/25 disabled:opacity-50 px-4 py-2 text-sm font-bold">
+                  <Icon name="success" tone="current" className="h-4 w-4" /> {bulkActionBusy === "review" ? "Marking…" : "Mark reviewed"}
+                </button>
+                <button onClick={() => confirmEvents(selectedIds)} disabled={!!bulkActionBusy} data-testid="bulk-confirm"
+                        className="inline-flex items-center gap-1.5 rounded-full bg-[#55B3AD] hover:bg-[#45938e] disabled:opacity-50 px-4 py-2 text-sm font-bold text-[#0d2a28]">
+                  <Icon name="success" tone="current" className="h-4 w-4" /> {bulkActionBusy === "confirm" ? "Confirming…" : "Mark confirmed"}
+                </button>
+                <button onClick={() => setSelectedIds(new Set())} className="text-white/70 hover:text-white text-sm px-2">Clear</button>
+              </div>
+            </div>
+            <div className="flex flex-col sm:flex-row sm:items-center gap-2 border-t border-white/15 pt-3">
+              <div className="text-[11px] uppercase tracking-widest font-bold text-white/60 whitespace-nowrap">Set organizer</div>
+              <input value={bulkName} onChange={(e) => setBulkName(e.target.value)} data-testid="bulk-organizer-name" placeholder="Organizer name"
+                     className="flex-1 min-w-0 rounded-full border-0 px-3 py-2 text-sm text-[#1F3F5B]" />
+              <input value={bulkEmail} onChange={(e) => setBulkEmail(e.target.value)} data-testid="bulk-organizer-email" placeholder="RSVP contact email" type="email"
+                     className="flex-1 min-w-0 rounded-full border-0 px-3 py-2 text-sm text-[#1F3F5B]" />
+              <button onClick={applyBulk} disabled={bulkBusy} data-testid="bulk-apply"
+                      className="rounded-full bg-[#F2A03B] hover:bg-[#d98c30] disabled:opacity-50 px-5 py-2 text-sm font-bold whitespace-nowrap">{bulkBusy ? "Applying…" : "Apply to selected"}</button>
+            </div>
           </div>
         )}
         {visible.length === 0 && <div className="text-slate-500 text-sm">No events match your filters.</div>}
         {visible.map((ev) => {
           const recipients = drafts[ev.id] || [];
+          const parts = eventTitleParts(ev.title);
           return (
             <div key={ev.id} className="bg-white rounded-2xl p-4 sm:p-5 border border-slate-100 shadow-sm" data-testid={`admin-event-${ev.id}`}>
               <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2 sm:gap-3">
@@ -188,7 +287,10 @@ export default function AdminEvents() {
                   <input type="checkbox" checked={selectedIds.has(ev.id)} onChange={() => toggleSel(ev.id)}
                          data-testid={`select-event-${ev.id}`} className="mt-1.5 h-4 w-4 accent-[#55B3AD] shrink-0" />
                   <div className="min-w-0">
-                  <div className="font-display font-bold text-base sm:text-lg text-[#1F3F5B]">{ev.title}</div>
+                  <div className="font-display font-bold text-base sm:text-lg text-[#1F3F5B] flex items-center gap-2 flex-wrap">
+                    <span>{parts.title}</span>
+                    {parts.tentative && <span data-testid={`tentative-${ev.id}`} className="text-[10px] font-bold uppercase tracking-widest px-2 py-0.5 rounded-full bg-[#F2A03B]/15 text-[#b86f1a]">Tentative</span>}
+                  </div>
                   <div className="text-xs text-slate-500 mt-0.5 flex flex-wrap items-center gap-x-2">
                     <span>{formatEventDate(ev.starts_at, ev.time_not_listed)}</span>
                     <span>· {ev.market}</span>
@@ -211,6 +313,12 @@ export default function AdminEvents() {
                         className="self-start inline-flex items-center gap-1 rounded-full border border-slate-200 hover:border-[#55B3AD] px-3 py-1.5 text-xs font-semibold text-[#1F3F5B]">
                   <Icon name="edit" tone="current" className="h-3.5 w-3.5" /> Edit details
                 </button>
+                {parts.tentative && (
+                  <button onClick={() => confirmEvents([ev.id])} disabled={!!bulkActionBusy} data-testid={`confirm-event-${ev.id}`}
+                          className="self-start inline-flex items-center gap-1 rounded-full border border-[#55B3AD] text-[#2A7871] hover:bg-[#55B3AD]/10 disabled:opacity-50 px-3 py-1.5 text-xs font-semibold">
+                    <Icon name="success" tone="current" className="h-3.5 w-3.5" /> Mark confirmed
+                  </button>
+                )}
                 <button onClick={() => setDeleting(ev)} data-testid={`delete-event-${ev.id}`}
                         className="self-start inline-flex items-center gap-1 rounded-full border border-red-200 hover:bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-600">
                   <Icon name="trash" tone="current" className="h-3.5 w-3.5" /> Delete
@@ -282,14 +390,65 @@ export default function AdminEvents() {
           <div className="bg-white rounded-2xl w-full max-w-md p-6" onClick={(e) => e.stopPropagation()}>
             <h3 className="font-display font-bold text-lg text-[#1F3F5B]">Delete event?</h3>
             <p className="mt-2 text-sm text-slate-600">
-              This permanently removes "<b>{deleting.title}</b>" and its signups.
-              {deleting.source === "aggregator" ? " Because it's an imported feed event, it will be tombstoned so the importer never brings it back." : ""}
+              This removes "<b>{eventTitleParts(deleting.title).title}</b>" and its signups from the calendar.
+              {deleting.source === "aggregator" ? " Because it's an imported feed event, it is tombstoned so the importer never brings it back." : ""}
+              {" "}A copy is kept under Deleted events so you can restore it.
             </p>
             <div className="mt-5 flex justify-end gap-2">
               <button onClick={() => setDeleting(null)} data-testid="delete-event-cancel"
                       className="rounded-full border border-slate-200 px-5 py-2 text-sm font-semibold text-slate-600">Cancel</button>
               <button onClick={() => doDelete(deleting)} data-testid="delete-event-confirm"
-                      className="rounded-full bg-red-600 hover:bg-red-700 text-white px-5 py-2 text-sm font-semibold">Delete permanently</button>
+                      className="rounded-full bg-red-600 hover:bg-red-700 text-white px-5 py-2 text-sm font-semibold">Delete event</button>
+            </div>
+          </div>
+        </div>
+      )}
+      {confirmBulkDelete && (
+        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4" onClick={() => setConfirmBulkDelete(false)} data-testid="bulk-delete-modal">
+          <div className="bg-white rounded-2xl w-full max-w-md p-6" onClick={(e) => e.stopPropagation()}>
+            <h3 className="font-display font-bold text-lg text-[#1F3F5B]">Delete {selectedIds.size} event{selectedIds.size === 1 ? "" : "s"}?</h3>
+            <p className="mt-2 text-sm text-slate-600">
+              The selected events and their signups are removed from the calendar. Imported feed events are tombstoned so the importer never brings them back. A copy of each is kept under Deleted events so you can restore it.
+            </p>
+            <div className="mt-5 flex justify-end gap-2">
+              <button onClick={() => setConfirmBulkDelete(false)} data-testid="bulk-delete-cancel"
+                      className="rounded-full border border-slate-200 px-5 py-2 text-sm font-semibold text-slate-600">Cancel</button>
+              <button onClick={bulkDelete} disabled={bulkActionBusy === "delete"} data-testid="bulk-delete-confirm"
+                      className="rounded-full bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white px-5 py-2 text-sm font-semibold">{bulkActionBusy === "delete" ? "Deleting…" : "Delete events"}</button>
+            </div>
+          </div>
+        </div>
+      )}
+      {showDeleted && (
+        <div className="fixed inset-0 z-50 bg-black/50 flex items-start justify-center p-4 overflow-y-auto" onClick={() => setShowDeleted(false)} data-testid="deleted-events-modal">
+          <div className="bg-white rounded-2xl w-full max-w-2xl my-8 p-6" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-1">
+              <h3 className="font-display font-bold text-lg text-[#1F3F5B]">Deleted events</h3>
+              <button onClick={() => setShowDeleted(false)} data-testid="deleted-events-close" className="text-slate-400 hover:text-slate-700"><Icon name="close" tone="current" className="h-5 w-5" /></button>
+            </div>
+            <p className="text-xs text-slate-500 mb-4">Restore re-adds the event and its signups. Copies are kept and never auto-purged.</p>
+            {deletedBusy && <div className="text-sm text-slate-500 py-8 text-center">Loading…</div>}
+            {!deletedBusy && deletedList.length === 0 && <div className="text-sm text-slate-500 py-8 text-center" data-testid="deleted-events-empty">No deleted events.</div>}
+            <div className="space-y-3">
+              {deletedList.map((d) => (
+                <div key={d.id} className="border border-slate-100 rounded-xl p-3 flex items-start justify-between gap-3" data-testid={`deleted-event-${d.id}`}>
+                  <div className="min-w-0">
+                    <div className="font-semibold text-[#1F3F5B] text-sm">{eventTitleParts(d.title).title}</div>
+                    <div className="text-xs text-slate-500 mt-0.5 flex flex-wrap gap-x-2">
+                      <span>{formatEventDate(d.starts_at, d.time_not_listed)}</span>
+                      {d.market && <span>· {d.market}</span>}
+                      <span className="uppercase tracking-wider text-slate-400">· {d.source || "community"}</span>
+                    </div>
+                    <div className="text-[11px] text-slate-400 mt-1">
+                      Deleted {d.deleted_at ? new Date(d.deleted_at).toLocaleDateString() : ""}{d.deleted_by_name ? ` by ${d.deleted_by_name}` : ""}
+                    </div>
+                  </div>
+                  <button onClick={() => restoreEvent(d.id)} disabled={restoringId === d.id} data-testid={`restore-event-${d.id}`}
+                          className="shrink-0 self-start inline-flex items-center gap-1 rounded-full bg-[#1F3F5B] hover:bg-[#152a3d] disabled:opacity-50 text-white px-4 py-1.5 text-xs font-semibold">
+                    <Icon name="refresh" tone="current" className="h-3.5 w-3.5" /> {restoringId === d.id ? "Restoring…" : "Restore"}
+                  </button>
+                </div>
+              ))}
             </div>
           </div>
         </div>

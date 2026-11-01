@@ -1095,6 +1095,112 @@ async def admin_update_event(event_id: str, body: EventAdminUpdate, admin=Depend
 
 
 # ------------------------------------------------------------------------- #
+# EVENTS-ADMIN-BULK-1: bulk delete (recoverable) + mark reviewed + confirm.
+# ------------------------------------------------------------------------- #
+import re as _re_events
+
+
+class EventIds(BaseModel):
+    event_ids: List[str] = []
+
+
+@router.post("/admin/events/bulk-delete")
+async def admin_bulk_delete_events(body: EventIds, admin=Depends(require_admin)):
+    """Soft-delete many events at once. Each event is copied to events_deleted
+    (recoverable), aggregator events are tombstoned so the importer never brings
+    them back, and the live event + its signups are removed. Writes ONE audit
+    entry recording who, when, and which events."""
+    from event_recovery import soft_delete_event
+    ids = [i for i in (body.event_ids or []) if isinstance(i, str)][:500]
+    if not ids:
+        raise HTTPException(status_code=400, detail="Select at least one event")
+    done: List[Dict[str, str]] = []
+    for eid in ids:
+        ev = await db.events.find_one({"id": eid}, {"_id": 0})
+        if not ev:
+            continue
+        await soft_delete_event(ev, admin)
+        done.append({"id": eid, "title": ev.get("title") or eid})
+    from audit import log_admin_action
+    await log_admin_action(
+        admin, "bulk_delete", "event", "bulk",
+        summary=f"Deleted {len(done)} event(s): " + ", ".join(d["title"] for d in done)[:160],
+        meta={"count": len(done), "events": done})
+    return {"ok": True, "deleted": len(done), "events": done}
+
+
+@router.post("/admin/events/bulk-review")
+async def admin_bulk_mark_reviewed(body: EventIds, admin=Depends(require_admin)):
+    """Clear the category-needs-review flag on the selected events. Does NOT
+    change the category itself."""
+    ids = [i for i in (body.event_ids or []) if isinstance(i, str)][:500]
+    if not ids:
+        raise HTTPException(status_code=400, detail="Select at least one event")
+    res = await db.events.update_many(
+        {"id": {"$in": ids}, "category_needs_review": True},
+        {"$set": {"category_needs_review": False,
+                  "updated_at": datetime.now(timezone.utc).isoformat()}})
+    from audit import log_admin_action
+    await log_admin_action(admin, "mark_reviewed", "event", "bulk",
+                           summary=f"Marked {res.modified_count} event(s) reviewed",
+                           meta={"count": res.modified_count, "event_ids": ids})
+    return {"ok": True, "updated": res.modified_count}
+
+
+@router.post("/admin/events/confirm")
+async def admin_confirm_events(body: EventIds, admin=Depends(require_admin)):
+    """Mark events confirmed (single or bulk): strip any leading "[Draft]" from
+    the title so the Tentative badge disappears, and lock the title so a later
+    scrape can never re-add "[Draft]"."""
+    ids = [i for i in (body.event_ids or []) if isinstance(i, str)][:500]
+    if not ids:
+        raise HTTPException(status_code=400, detail="Select at least one event")
+    confirmed: List[Dict[str, str]] = []
+    for eid in ids:
+        ev = await db.events.find_one({"id": eid}, {"_id": 0, "title": 1})
+        if not ev:
+            continue
+        new_title = _re_events.sub(r"^\s*\[\s*draft\s*\]\s*", "", ev.get("title") or "", flags=_re_events.I).strip()
+        await db.events.update_one(
+            {"id": eid},
+            {"$set": {"title": new_title, "admin_edited": True,
+                      "updated_at": datetime.now(timezone.utc).isoformat()},
+             "$addToSet": {"admin_locked_fields": "title"}})
+        confirmed.append({"id": eid, "title": new_title})
+    from audit import log_admin_action
+    await log_admin_action(admin, "confirm", "event", "bulk" if len(confirmed) != 1 else confirmed[0]["id"],
+                           summary=f"Confirmed {len(confirmed)} event(s)",
+                           meta={"count": len(confirmed), "events": confirmed})
+    return {"ok": True, "confirmed": len(confirmed), "events": confirmed}
+
+
+@router.get("/admin/events/deleted")
+async def admin_list_deleted_events(admin=Depends(require_admin)):
+    """List soft-deleted events (recoverable copies), newest first."""
+    docs = await db.events_deleted.find(
+        {}, {"_id": 0, "id": 1, "title": 1, "source": 1, "starts_at": 1,
+             "time_not_listed": 1, "market": 1, "deleted_at": 1,
+             "deleted_by_name": 1, "recoverable_until": 1}
+    ).sort("deleted_at", -1).to_list(500)
+    return {"count": len(docs), "events": docs}
+
+
+@router.post("/admin/events/{event_id}/restore")
+async def admin_restore_event(event_id: str, admin=Depends(require_admin)):
+    """Restore a soft-deleted event: re-insert it (and its signups) and remove
+    its tombstone so it is live again."""
+    from event_recovery import restore_event
+    recovery = await db.events_deleted.find_one({"id": event_id}, {"_id": 0})
+    if not recovery:
+        raise HTTPException(status_code=404, detail="Deleted event not found")
+    ok = await restore_event(recovery, admin)
+    if not ok:
+        raise HTTPException(status_code=400, detail="Recovery copy is incomplete")
+    return {"ok": True, "restored": event_id}
+
+
+
+# ------------------------------------------------------------------------- #
 # ADMIN-MAIL-1: Email delivery log (failures + fallbacks). No message bodies.
 # ------------------------------------------------------------------------- #
 _email_ttl_ready = False
