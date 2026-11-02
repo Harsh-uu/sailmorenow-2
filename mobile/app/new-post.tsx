@@ -15,9 +15,9 @@ import { handleUpgrade } from "@/src/lib/upgrade";
 import { MARKETPLACE_CHANGED, CONTENT_CHANGED } from "@/src/lib/events";
 
 const TYPES = [
-  { key: "general", label: "Discussion" },
   { key: "sailing_opportunity", label: "Sailing opportunity" },
-  { key: "question", label: "Question" },
+  { key: "volunteer_opportunity", label: "Volunteer opportunity" },
+  { key: "general", label: "General" },
   { key: "for_sale", label: "For sale" },
 ];
 

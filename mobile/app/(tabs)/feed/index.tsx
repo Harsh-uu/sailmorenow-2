@@ -117,8 +117,14 @@ export default function Hub() {
         if (mpApplied.cond) qs += `&condition=${encodeURIComponent(mpApplied.cond)}`;
         out = (await api.get<any[]>(`/posts?${qs}`)).map((p) => ({ ...p, _kind: "post" }));
       } else if (filter === "volunteer") {
-        const evs = await api.get<any[]>(`/events${mqFirst}`);
-        out = evs.filter((e) => e.is_volunteer).map((e) => ({ ...e, _kind: "event" }));
+        const [vposts, evs] = await Promise.all([
+          api.get<any[]>(`/posts?type=volunteer_opportunity${mq}`).catch(() => []),
+          api.get<any[]>(`/events${mqFirst}`).catch(() => []),
+        ]);
+        out = [
+          ...vposts.map((p) => ({ ...p, _kind: "post" })),
+          ...evs.filter((e) => e.is_volunteer).map((e) => ({ ...e, _kind: "event" })),
+        ];
       }
       // For Sale lives only on the Marketplace (for_sale) view.
       if (filter !== "for_sale") out = out.filter((x) => !(x._kind === "post" && x.type === "for_sale"));
@@ -153,6 +159,7 @@ export default function Hub() {
     const belongs =
       filter === "for_sale" ? t === "for_sale" :
       filter === "sailing" ? t === "sailing_opportunity" :
+      filter === "volunteer" ? t === "volunteer_opportunity" :
       (filter === "feed" || filter === "all") ? t !== "for_sale" : false;
     const marketOk = market === "all" || market === "mine" || item.market === market;
     if (!belongs || !marketOk) return;
@@ -246,6 +253,22 @@ export default function Hub() {
     return [...map.entries()].sort((a, b) => (a[0] < b[0] ? 1 : -1));
   }, [items]);
   const listData = useMemo(() => {
+    // Volunteer filter: two clearly labeled groups, opportunities (posts) first,
+    // then volunteer events. Not month-grouped.
+    if (items && filter === "volunteer") {
+      const rows: any[] = [];
+      const vPosts = items.filter((it) => it._kind === "post");
+      const vEvents = items.filter((it) => it._kind === "event");
+      if (vPosts.length) {
+        rows.push({ _row: "header", k: "grp-vol-posts", label: "Volunteer opportunities", count: vPosts.length, static: true });
+        for (const it of vPosts) rows.push({ _row: "item", it, k: "grp-vol-posts" });
+      }
+      if (vEvents.length) {
+        rows.push({ _row: "header", k: "grp-vol-events", label: "Volunteer events", count: vEvents.length, static: true });
+        for (const it of vEvents) rows.push({ _row: "item", it, k: "grp-vol-events" });
+      }
+      return rows;
+    }
     if (!useGroups) return (items || []).map((it) => ({ _row: "item" as const, it, k: "", label: "", count: 0 }));
     const rows: any[] = [];
     for (const [k, arr] of monthGroups) {
@@ -254,7 +277,7 @@ export default function Hub() {
       if (!isMonthCollapsed(k)) for (const it of arr) rows.push({ _row: "item", it, k });
     }
     return rows;
-  }, [useGroups, items, monthGroups, collapsedMonths]);
+  }, [useGroups, items, monthGroups, collapsedMonths, filter]);
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.surfaceSecondary }}>
@@ -317,12 +340,19 @@ export default function Hub() {
           ListEmptyComponent={<View style={{ paddingTop: 70 }}><EmptyState icon="compass-outline" title="Nothing here yet" subtitle="Try another filter or market." /></View>}
           renderItem={({ item: row }) =>
             row._row === "header" ? (
-              <Pressable testID={`month-toggle-${row.k}`} onPress={() => setCollapsedMonths((m) => ({ ...m, [row.k]: !isMonthCollapsed(row.k) }))}
-                style={styles.monthHeader}>
-                <Icon name={isMonthCollapsed(row.k) ? "chevron-forward" : "chevron-down"} size={18} color={colors.onSurface} footprint={18} />
-                <Text style={[styles.monthTitle, { color: colors.onSurface }]}>{row.label}</Text>
-                <Text style={{ color: colors.muted, fontSize: 12.5 }}>{row.count}</Text>
-              </Pressable>
+              row.static ? (
+                <View style={styles.monthHeader} testID={`group-${row.k}`}>
+                  <Text style={[styles.monthTitle, { color: colors.onSurface, flex: 1 }]} numberOfLines={2} maxFontSizeMultiplier={1.4}>{row.label}</Text>
+                  <Text style={{ color: colors.muted, fontSize: 12.5 }} maxFontSizeMultiplier={1.4}>{row.count}</Text>
+                </View>
+              ) : (
+                <Pressable testID={`month-toggle-${row.k}`} onPress={() => setCollapsedMonths((m) => ({ ...m, [row.k]: !isMonthCollapsed(row.k) }))}
+                  style={styles.monthHeader}>
+                  <Icon name={isMonthCollapsed(row.k) ? "chevron-forward" : "chevron-down"} size={18} color={colors.onSurface} footprint={18} />
+                  <Text style={[styles.monthTitle, { color: colors.onSurface }]}>{row.label}</Text>
+                  <Text style={{ color: colors.muted, fontSize: 12.5 }}>{row.count}</Text>
+                </Pressable>
+              )
             ) : (
               <HubCard item={row.it} rx={rx[`${row.it._kind === "post" ? "post" : "discussion"}:${row.it.id}`]} onPress={() => onCardPress(row.it)} onReact={reactTo} expanded={expandedId === row.it.id} onOpenFull={() => openItem(row.it)} onCompose={() => composeItem(row.it)} saved={isSaved(row.it.id)} onToggleSave={toggleSaved} />
             )

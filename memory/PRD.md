@@ -1,5 +1,18 @@
 # Sail More Now
 
+## Changelog - Jun 2026 (POSTTYPES-1: align post types web/mobile; mobile JS only)
+No testing agent. No publish. No schema change (create_post stores any type; volunteer_opportunity needs no extra fields). No existing data touched; temp user + 2 temp posts were created via the real mobile payload for verification and then deleted (zero residue), so no backup/undo script needed.
+PART A (report): sailing opportunity posts default to 30 days (PostCreate.expires_days=30, clamped 1-365); expires_at set server-side to now+30d (no ends_at). Neither composer exposes a duration field, so the author cannot choose/change it. POST /posts/{id}/extend exists but is wired to NO web or mobile UI, so there is no author-facing renew for an expired sailing opportunity. Feed rules unchanged.
+PART B (build, mobile only):
+1. Renamed "Discussion" to "General" on mobile. Only ONE place renders that post-type label: app/new-post.tsx TYPES. Feed cards badge by _kind ("Post" for all post types), never "Discussion"; no filter was named Discussion; so that single chip label was the only change. Stored value stays general.
+2. Removed "Question" from app/new-post.tsx composer. Backend + stored value untouched. 0 question posts exist today; if any existed they appear under the Hub "Feed" and "All" filters (web "All posts") and keep doing so (load for feed/all returns all non-for_sale post types).
+3. Added "Volunteer opportunity" (volunteer_opportunity) to app/new-post.tsx. New chip order matches web: Sailing opportunity, Volunteer opportunity, General, For sale.
+4. app/(tabs)/feed/index.tsx Hub "Volunteer" filter now fetches volunteer_opportunity POSTS plus volunteer EVENTS and renders two labeled, non-collapsible groups: "Volunteer opportunities" (posts) then "Volunteer events" (events). optimisticPrepend + the /posts fetch in All/Feed already surface a new volunteer post in Hub (All) immediately. Group headers use auto-fit (numberOfLines 2 + capped scaling).
+5. Web: no composer/filter change. Verified web already has a "Volunteer opportunity" composer type and feed filter; no mismatch surfaced.
+Verified LIVE on web: temp volunteer_opportunity + general posts (created via the exact mobile /posts payload) appear under /community?type=volunteer_opportunity, ?type=general, and unfiltered; "Volunteer opportunity" badge renders; New post button present (web posting intact). Mobile: Metro bundles clean (1774 modules); code-only, NOT device-tested.
+
+
+
 ## Changelog - Jun 2026 (CREWBANK-OPP-2: add a sailing opportunity from Crew Bank; web + mobile)
 No testing agent. No publish. No schema change. No data touched (only code; a temp DB user+session was created for web screenshots and deleted, zero residue). No backup/undo needed (no migration). Mobile is JS only and NOT device-tested; web verified live in-browser.
 PART A built:
