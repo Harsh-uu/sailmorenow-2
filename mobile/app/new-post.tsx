@@ -15,10 +15,10 @@ import { handleUpgrade } from "@/src/lib/upgrade";
 import { MARKETPLACE_CHANGED, CONTENT_CHANGED } from "@/src/lib/events";
 
 const TYPES = [
-  { key: "sailing_opportunity", label: "Sailing opportunity" },
-  { key: "volunteer_opportunity", label: "Volunteer opportunity" },
   { key: "general", label: "General" },
   { key: "for_sale", label: "For sale" },
+  { key: "sailing_opportunity", label: "Sailing opportunity" },
+  { key: "volunteer_opportunity", label: "Volunteer opportunity" },
 ];
 
 export default function NewPost() {
@@ -126,18 +126,14 @@ export default function NewPost() {
         {isEdit ? null : (
         <>
         <Label>Type</Label>
-        <View style={styles.wrap}>
-          {TYPES.map((t) => (
-            <Pressable
-              key={t.key}
-              testID={`post-type-${t.key}`}
-              onPress={() => setType(t.key)}
-              style={[styles.pill, { borderColor: type === t.key ? colors.teal : colors.border, backgroundColor: type === t.key ? colors.tealSoft : colors.surface }]}
-            >
-              <Text style={{ color: colors.onSurfaceSecondary, fontWeight: "600", fontSize: 13 }}>{t.label}</Text>
-            </Pressable>
-          ))}
-        </View>
+        <Picker
+          testID="post-type-picker"
+          title="Choose a type"
+          placeholder="Select a type"
+          value={type}
+          options={TYPES.map((t) => ({ value: t.key, label: t.label }))}
+          onChange={(v) => setType(v)}
+        />
         </>
         )}
 
