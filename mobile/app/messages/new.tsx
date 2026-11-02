@@ -91,7 +91,7 @@ export default function NewMessage() {
         });
         const name = res.title || selected.map((p) => p.name?.split(" ")[0]).filter(Boolean).slice(0, 3).join(", ");
         toast.success("Group chat started");
-        if (res.locked_members?.length) toast.info(`On a free plan — won't receive this until they upgrade: ${res.locked_members.join(", ")}.`);
+        if (res.locked_members?.length) toast.info(`On a free plan - won't receive this until they upgrade: ${res.locked_members.join(", ")}.`);
         router.replace({ pathname: "/messages/[id]", params: { id: res.thread_id, name, group: "1" } });
       }
     } catch (e: any) {

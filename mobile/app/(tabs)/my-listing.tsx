@@ -90,7 +90,7 @@ export default function MyListing() {
               {!isPremium ? (
                 <Pressable onPress={() => router.push("/pricing")} testID="photos-locked-row" style={styles.checkRow}>
                   <Icon name="lock-closed" size={18} color={colors.muted} footprint={18} />
-                  <Text style={[styles.checkLbl, { color: colors.muted }]}>Photos — upgrade to Premium</Text>
+                  <Text style={[styles.checkLbl, { color: colors.muted }]}>Photos - upgrade to Premium</Text>
                   <Icon name="rocket-outline" size={16} color={colors.accent} footprint={16} />
                 </Pressable>
               ) : null}
@@ -172,7 +172,7 @@ export default function MyListing() {
             </View>
             <View style={styles.metaRow}>
               <Icon name="images-outline" size={15} color={colors.teal}  footprint={15}/>
-              <Text style={[styles.meta, { color: colors.onSurfaceSecondary }]}>{isPremium ? `${(pro.photos || []).length} photos` : "Photos — Premium only"}</Text>
+              <Text style={[styles.meta, { color: colors.onSurfaceSecondary }]}>{isPremium ? `${(pro.photos || []).length} photos` : "Photos - Premium only"}</Text>
             </View>
           </View>
 

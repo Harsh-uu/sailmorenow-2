@@ -382,7 +382,7 @@ export default function Register() {
                 <Label>Category (select all that apply)</Label>
                 <Pressable testID="reg-orgcat-select" onPress={() => setOrgCatOpen(true)}
                   style={[styles.select, { borderColor: orgCats.length ? colors.teal : colors.border, backgroundColor: colors.surface }]}>
-                  <Text numberOfLines={1} style={{ color: orgCats.length ? colors.onSurface : colors.muted, fontSize: 15, flex: 1 }}>
+                  <Text numberOfLines={2} style={{ color: orgCats.length ? colors.onSurface : colors.muted, fontSize: 15, flex: 1, flexShrink: 1, marginRight: 8 }}>
                     {orgCats.length ? orgCats.join(", ") : "Select your category"}
                   </Text>
                   <Icon name="chevron-down" size={18} color={colors.muted} footprint={18} />
@@ -422,7 +422,7 @@ export default function Register() {
             <Label>Home market</Label>
             <Pressable testID="reg-market-select" onPress={() => setMarketOpen(true)}
               style={[styles.select, { borderColor: market ? colors.teal : colors.border, backgroundColor: colors.surface }]}>
-              <Text style={{ color: market ? colors.onSurface : colors.muted, fontSize: 15 }}>{market || "Select your home market"}</Text>
+              <Text style={{ color: market ? colors.onSurface : colors.muted, fontSize: 15, flex: 1, flexShrink: 1, marginRight: 8 }}>{market || "Select your home market"}</Text>
               <Icon name="chevron-down" size={18} color={colors.muted} footprint={18} />
             </Pressable>
             <Modal visible={marketOpen} transparent animationType="slide" onRequestClose={() => setMarketOpen(false)}>
@@ -447,7 +447,7 @@ export default function Register() {
 
             <View style={styles.newsRow}>
               <View style={{ flex: 1, paddingRight: 10 }}>
-                <Text style={{ color: colors.onSurface, fontSize: 14, fontWeight: "700" }}>Sail More Now — the quarterly digest</Text>
+                <Text style={{ color: colors.onSurface, fontSize: 14, fontWeight: "700" }}>Sail More Now - the quarterly digest</Text>
                 <Text style={{ color: colors.onSurfaceSecondary, fontSize: 12.5, lineHeight: 17, marginTop: 2 }}>Sailing and community events, educational information, and featured Boat Pros. One email a quarter, unsubscribe any time.</Text>
               </View>
               <Switch value={newsletter} onValueChange={setNewsletter} trackColor={{ true: colors.teal }} testID="reg-newsletter-switch" />
@@ -487,7 +487,7 @@ const styles = StyleSheet.create({
   gridItem: { width: "47%", borderWidth: 1.5, borderRadius: 14, paddingVertical: 16, alignItems: "center" },
   wrap: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   pill: { paddingHorizontal: 14, paddingVertical: 9, borderRadius: 999, borderWidth: 1 },
-  select: { borderWidth: 1, borderRadius: 12, paddingHorizontal: 14, height: 50, flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  select: { borderWidth: 1, borderRadius: 12, paddingHorizontal: 14, minHeight: 50, paddingVertical: 8, flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   marketBackdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "flex-end" },
   marketSheet: { borderTopLeftRadius: 24, borderTopRightRadius: 24, maxHeight: "70%", paddingBottom: 20 },
   marketItem: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 18, paddingVertical: 14, borderBottomWidth: 1 },

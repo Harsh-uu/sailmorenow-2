@@ -145,7 +145,7 @@ async def _volunteer_reminder_job(db):
             if await db.notifications.find_one({"user_id": uid, "kind": "volunteer_reminder",
                                                 "meta.event_id": ev["id"]}):
                 continue
-            body = f"You signed up to volunteer {lead_phrase} for '{ev['title']}' — {when}{' · ' + where if where else ''}. Thank you!"
+            body = f"You signed up to volunteer {lead_phrase} for '{ev['title']}' - {when}{' · ' + where if where else ''}. Thank you!"
             await notify(user_id=uid, kind="volunteer_reminder",
                          title=f"Volunteer reminder: {ev['title']}", body=body,
                          link=f"/events?event={ev['id']}", meta={"event_id": ev["id"]})
@@ -153,7 +153,7 @@ async def _volunteer_reminder_job(db):
             if email:
                 try:
                     html = (f"<p>Hi!</p><p>Just a reminder that you signed up to <b>volunteer</b> for "
-                            f"<b>{ev['title']}</b> {lead_phrase} — {when}{(' at ' + where) if where else ''}.</p>"
+                            f"<b>{ev['title']}</b> {lead_phrase} - {when}{(' at ' + where) if where else ''}.</p>"
                             f"<p>We can't wait to see you there. Fair winds!</p>")
                     await send_email(recipient_email=email, subject=f"Volunteer reminder: {ev['title']}", html_content=html)
                 except Exception:
@@ -748,7 +748,7 @@ async def _contact_reply_retry_job(db):
                     f"<div style='font-family:system-ui,sans-serif; color:#0f172a;'>"
                     f"<p>Hi {(msg.get('name') or 'there').replace('<', '&lt;')},</p>"
                     f"<div style='white-space:pre-wrap;'>{(r.get('body') or '').replace('<', '&lt;')}</div>"
-                    f"<p style='margin-top:20px; color:#64748b; font-size:12px;'>— The Sail More Now team · info@sailmorenow.com</p>"
+                    f"<p style='margin-top:20px; color:#64748b; font-size:12px;'>- The Sail More Now team · info@sailmorenow.com</p>"
                     f"</div>"
                 )
                 try:

@@ -153,7 +153,7 @@ export default function ChatThread() {
         toast.info(`${msg.recipient_name || "This member"} is on a free plan and can't receive messages yet. We've sent them a notification to upgrade.`);
       }
       if (isGroup && msg.locked_members && msg.locked_members.length) {
-        toast.info(`On a free plan — won't receive this until they upgrade: ${msg.locked_members.join(", ")}.`);
+        toast.info(`On a free plan - won't receive this until they upgrade: ${msg.locked_members.join(", ")}.`);
       }
     } catch (e) {
       setText(body);

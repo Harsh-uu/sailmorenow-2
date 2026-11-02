@@ -172,7 +172,7 @@ export default function Directory() {
                 <Button
                   title="Invite a pro you know"
                   icon="share-social-outline"
-                  onPress={() => Share.share({ message: `Know a great ${category} in ${market === "all" ? "the PNW" : market}? They should get listed on Sail More Now — the Pacific Northwest sailing community.` }).catch(() => {})}
+                  onPress={() => Share.share({ message: `Know a great ${category} in ${market === "all" ? "the PNW" : market}? They should get listed on Sail More Now - the Pacific Northwest sailing community.` }).catch(() => {})}
                   testID="invite-pro-btn"
                   style={{ marginTop: 12, alignSelf: "center" }}
                 />

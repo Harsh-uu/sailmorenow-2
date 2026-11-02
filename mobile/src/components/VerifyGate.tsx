@@ -4,9 +4,12 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { api } from "@/src/lib/api";
 import { useAuth } from "@/src/context/AuthContext";
 import { useToast } from "@/src/context/ToastContext";
+import { useTheme } from "@/src/theme";
+import { Button } from "@/src/components/ui";
 
+// The amber banner keeps a fixed amber background in both themes, so its dark
+// ink text stays high-contrast regardless of light/dark mode.
 const AMBER = "#F2A03B";
-const NAVY = "#1F3F5B";
 const INK = "#10233A";
 const SUPPORT = "mailto:customersupport@sailmorenow.com";
 
@@ -15,6 +18,7 @@ async function resend() {
 }
 
 function FixEmailRow({ onDone }: { onDone: () => void }) {
+  const { colors } = useTheme();
   const [open, setOpen] = useState(false);
   const [email, setEmail] = useState("");
   const [busy, setBusy] = useState(false);
@@ -33,7 +37,7 @@ function FixEmailRow({ onDone }: { onDone: () => void }) {
   if (!open) {
     return (
       <Pressable testID="verify-fix-email" onPress={() => setOpen(true)} style={styles.linkBtn}>
-        <Text style={styles.linkTxt}>Wrong email? Fix it</Text>
+        <Text style={[styles.linkTxt, { color: colors.tealText }]}>Wrong email? Fix it</Text>
       </Pressable>
     );
   }
@@ -42,11 +46,10 @@ function FixEmailRow({ onDone }: { onDone: () => void }) {
       <TextInput
         testID="verify-fix-email-input" value={email} onChangeText={setEmail}
         placeholder="correct@email.com" autoCapitalize="none" keyboardType="email-address"
-        placeholderTextColor="#94a3b8" style={styles.input}
+        placeholderTextColor={colors.muted}
+        style={[styles.input, { borderColor: colors.border, backgroundColor: colors.surface, color: colors.onSurface }]}
       />
-      <Pressable testID="verify-fix-email-submit" onPress={submit} disabled={busy} style={styles.darkBtn}>
-        <Text style={styles.darkBtnTxt}>{busy ? "Saving…" : "Send new link"}</Text>
-      </Pressable>
+      <Button title={busy ? "Saving…" : "Send new link"} onPress={submit} loading={busy} testID="verify-fix-email-submit" style={{ width: "100%" }} />
     </View>
   );
 }
@@ -80,7 +83,7 @@ export function VerifyBanner() {
     <View testID="verify-banner" style={[styles.banner, { paddingTop: insets.top + 8 }]}>
       <Text style={styles.bannerTxt}>Verify your email within {hours} {hours === 1 ? "hour" : "hours"} to keep your account.</Text>
       <Pressable testID="verify-resend" onPress={doResend} disabled={cooldown > 0} style={styles.darkPill}>
-        <Text style={styles.darkPillTxt}>{cooldown > 0 ? `Resend ${cooldown}s` : "Resend"}</Text>
+        <Text style={styles.darkPillTxt} maxFontSizeMultiplier={1.2}>{cooldown > 0 ? `Resend ${cooldown}s` : "Resend"}</Text>
       </Pressable>
     </View>
   );
@@ -88,6 +91,7 @@ export function VerifyBanner() {
 
 export function VerifyLockedScreen() {
   const { user, refresh, logout } = useAuth();
+  const { colors } = useTheme();
   const toast = useToast();
   const insets = useSafeAreaInsets();
   const [cooldown, setCooldown] = useState(0);
@@ -110,22 +114,30 @@ export function VerifyLockedScreen() {
   };
   const email = (user as any)?.verification?.email || "your email";
   return (
-    <ScrollView testID="verify-locked" contentContainerStyle={[styles.lockWrap, { paddingTop: insets.top + 60 }]}>
-      <Text style={styles.lockTitle}>Verify your email to continue</Text>
-      <Text style={styles.lockBody}>
+    <ScrollView
+      testID="verify-locked"
+      style={{ backgroundColor: colors.surfaceSecondary }}
+      contentContainerStyle={[styles.lockWrap, { paddingTop: insets.top + 60, backgroundColor: colors.surfaceSecondary }]}
+    >
+      <Text style={[styles.lockTitle, { color: colors.onSurface }]}>Verify your email to continue</Text>
+      <Text style={[styles.lockBody, { color: colors.onSurfaceSecondary }]}>
         Your 24-hour window has ended. Please verify {email} to unlock posting, messaging and checkout.
         The link we emailed still works.
       </Text>
-      <Pressable testID="verify-locked-resend" onPress={doResend} disabled={cooldown > 0} style={styles.darkBtn}>
-        <Text style={styles.darkBtnTxt}>{cooldown > 0 ? `Resend in ${cooldown}s` : "Resend verification email"}</Text>
-      </Pressable>
+      <Button
+        title={cooldown > 0 ? `Resend in ${cooldown}s` : "Resend verification email"}
+        onPress={doResend}
+        disabled={cooldown > 0}
+        testID="verify-locked-resend"
+        style={{ width: "100%" }}
+      />
       <FixEmailRow onDone={refresh} />
       <View style={styles.lockFooter}>
         <Pressable testID="verify-locked-support" onPress={() => Linking.openURL(SUPPORT)}>
-          <Text style={styles.footerLink}>Contact support</Text>
+          <Text style={[styles.footerLink, { color: colors.tealText }]}>Contact support</Text>
         </Pressable>
         <Pressable testID="verify-locked-signout" onPress={logout}>
-          <Text style={styles.footerMuted}>Sign out</Text>
+          <Text style={[styles.footerMuted, { color: colors.onSurfaceSecondary }]}>Sign out</Text>
         </Pressable>
       </View>
     </ScrollView>
@@ -135,17 +147,15 @@ export function VerifyLockedScreen() {
 const styles = StyleSheet.create({
   banner: { backgroundColor: AMBER, paddingHorizontal: 16, paddingBottom: 10, flexDirection: "row", alignItems: "center", gap: 10 },
   bannerTxt: { flex: 1, color: INK, fontWeight: "700", fontSize: 13 },
-  darkPill: { backgroundColor: INK, borderRadius: 999, paddingHorizontal: 14, paddingVertical: 7 },
+  darkPill: { backgroundColor: INK, borderRadius: 999, paddingHorizontal: 14, paddingVertical: 7, flexShrink: 0 },
   darkPillTxt: { color: "#fff", fontWeight: "800", fontSize: 12 },
-  lockWrap: { paddingHorizontal: 24, paddingBottom: 40, alignItems: "center", gap: 14 },
-  lockTitle: { fontSize: 24, fontWeight: "800", color: NAVY, textAlign: "center" },
-  lockBody: { fontSize: 14, color: "#64748b", textAlign: "center", lineHeight: 21 },
-  darkBtn: { backgroundColor: NAVY, borderRadius: 999, paddingHorizontal: 22, paddingVertical: 13, width: "100%", alignItems: "center" },
-  darkBtnTxt: { color: "#fff", fontWeight: "800", fontSize: 14 },
+  lockWrap: { paddingHorizontal: 24, paddingBottom: 40, alignItems: "center", gap: 14, flexGrow: 1 },
+  lockTitle: { fontSize: 24, fontWeight: "800", textAlign: "center" },
+  lockBody: { fontSize: 14, textAlign: "center", lineHeight: 21 },
   linkBtn: { paddingVertical: 10 },
-  linkTxt: { color: NAVY, fontWeight: "700", fontSize: 14 },
-  input: { borderWidth: 1, borderColor: "#e2e8f0", borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, fontSize: 14, color: INK, width: "100%" },
-  lockFooter: { flexDirection: "row", gap: 24, marginTop: 8 },
-  footerLink: { color: "#55B3AD", fontWeight: "700", fontSize: 13 },
-  footerMuted: { color: "#94a3b8", fontWeight: "700", fontSize: 13 },
+  linkTxt: { fontWeight: "700", fontSize: 14 },
+  input: { borderWidth: 1, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, minHeight: 48, fontSize: 14, width: "100%" },
+  lockFooter: { flexDirection: "row", flexWrap: "wrap", justifyContent: "center", columnGap: 24, rowGap: 10, marginTop: 8 },
+  footerLink: { fontWeight: "700", fontSize: 13 },
+  footerMuted: { fontWeight: "700", fontSize: 13 },
 });

@@ -24,7 +24,7 @@ export function NotificationBell({ href = "/notifications", color }: { href?: st
       <Icon name="notifications-outline" size={22} color={tint} footprint={22} />
       {unread > 0 ? (
         <View testID="notifications-badge" style={[styles.badge, { backgroundColor: colors.accent, borderColor: colors.brandPrimary }]}>
-          <Text style={[styles.badgeText, { color: colors.onAccent }]}>{unread > 9 ? "9+" : String(unread)}</Text>
+          <Text maxFontSizeMultiplier={1} numberOfLines={1} style={[styles.badgeText, { color: colors.onAccent }]}>{unread > 9 ? "9+" : String(unread)}</Text>
         </View>
       ) : null}
     </Pressable>
@@ -34,7 +34,7 @@ export function NotificationBell({ href = "/notifications", color }: { href?: st
 const styles = StyleSheet.create({
   btn: { width: 44, height: 44, alignItems: "center", justifyContent: "center" },
   badge: {
-    position: "absolute", top: 4, right: 4, minWidth: 18, height: 18, borderRadius: 9,
+    position: "absolute", top: 3, right: 3, minWidth: 20, height: 18, borderRadius: 9,
     paddingHorizontal: 4, alignItems: "center", justifyContent: "center", borderWidth: 1.5,
   },
   badgeText: { fontSize: 10, fontWeight: "800" },

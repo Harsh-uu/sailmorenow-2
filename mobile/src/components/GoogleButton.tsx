@@ -37,7 +37,7 @@ export function GoogleButton({
       ) : (
         <View style={styles.row}>
           <Icon name="logo-google" size={18} color={fg} footprint={18} />
-          <Text style={[styles.text, { color: fg }]}>Continue with Google</Text>
+          <Text numberOfLines={2} maxFontSizeMultiplier={1.2} style={[styles.text, { color: fg }]}>Continue with Google</Text>
         </View>
       )}
     </Pressable>
@@ -45,7 +45,7 @@ export function GoogleButton({
 }
 
 const styles = StyleSheet.create({
-  btn: { height: 50, borderRadius: 999, alignItems: "center", justifyContent: "center", paddingHorizontal: 22, borderWidth: 1.5 },
-  row: { flexDirection: "row", alignItems: "center", gap: 8 },
-  text: { fontWeight: "700", fontSize: 16 },
+  btn: { minHeight: 50, borderRadius: 999, alignItems: "center", justifyContent: "center", paddingHorizontal: 22, paddingVertical: 12, borderWidth: 1.5 },
+  row: { flexDirection: "row", alignItems: "center", gap: 8, flexShrink: 1 },
+  text: { fontWeight: "700", fontSize: 16, flexShrink: 1 },
 });

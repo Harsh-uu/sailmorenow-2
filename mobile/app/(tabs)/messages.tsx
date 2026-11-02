@@ -103,7 +103,7 @@ export default function Messages() {
       {unlock ? (
         <View testID="inbox-unlock-banner" style={{ flexDirection: "row", alignItems: "center", gap: 10, margin: 12, marginBottom: 0, padding: 12, borderRadius: 14, backgroundColor: colors.accent + "1A", borderWidth: 1, borderColor: colors.accent + "55" }}>
           <Icon name="mail" size={18} color={colors.accent} footprint={18} />
-          <Text style={{ flex: 1, color: colors.onSurface, fontWeight: "700", fontSize: 13.5 }}>You have {unlock.count} message{unlock.count === 1 ? "" : "s"} waiting — now unlocked.</Text>
+          <Text style={{ flex: 1, color: colors.onSurface, fontWeight: "700", fontSize: 13.5 }}>You have {unlock.count} message{unlock.count === 1 ? "" : "s"} waiting - now unlocked.</Text>
           <Pressable testID="inbox-unlock-dismiss" onPress={dismissUnlock} hitSlop={8}>
             <Icon name="close" size={16} color={colors.muted} footprint={16} />
           </Pressable>

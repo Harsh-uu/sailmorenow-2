@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Alert, DeviceEventEmitter, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from "react-native";
+import { Alert, DeviceEventEmitter, PixelRatio, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from "react-native";
 import { MotionModal as Modal } from "@/src/components/MotionModal";
 import { router, useLocalSearchParams } from "expo-router";
 import dayjs from "dayjs";
@@ -51,6 +51,10 @@ export default function NewEvent() {
   const params = useLocalSearchParams<{ edit?: string; title?: string; description?: string; market?: string; starts_at?: string; ends_at?: string; location?: string; is_race?: string; is_volunteer?: string; is_paid?: string; is_free?: string; volunteer_contact_email?: string; volunteer_contact_phone?: string; volunteer_reminder_lead_days?: string; category?: string; registration_url?: string }>();
   const editId = params.edit;
   const isAdmin = user?.platform_role === "admin";
+  // At large accessibility text, stack the Start/End time pickers so the longer
+  // "End time (optional)" label can wrap without misaligning the two columns and
+  // each picker gets full width for its value.
+  const stackTimes = PixelRatio.getFontScale() >= 1.2;
   const [markets, setMarkets] = useState<string[]>([]);
   const [title, setTitle] = useState((params.title as string) || "");
   const [description, setDescription] = useState((params.description as string) || "");
@@ -172,21 +176,21 @@ export default function NewEvent() {
         </View>
         <Pressable testID="event-time-tbd" onPress={() => setTimeTbd((v) => !v)} style={{ flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 8 }}>
           <Icon name={timeTbd ? "checkbox" : "square-outline"} size={20} color={timeTbd ? colors.brandTertiary : colors.muted} footprint={20} />
-          <Text style={{ color: colors.onSurface, fontSize: 14 }}>Time to be decided (show the date only)</Text>
+          <Text style={{ color: colors.onSurface, fontSize: 14, flex: 1, flexShrink: 1 }}>Time to be decided (show the date only)</Text>
         </Pressable>
         {!timeTbd && (
-        <View style={{ flexDirection: "row", gap: 12 }}>
-          <View style={{ flex: 1 }}>
+        <View style={{ flexDirection: stackTimes ? "column" : "row", gap: 12 }}>
+          <View style={stackTimes ? { width: "100%" } : { flex: 1 }}>
             <Label>Start time</Label>
             <Pressable testID="event-start-time" onPress={() => setPickerFor("start")} style={[styles.select, { borderColor: colors.border, backgroundColor: colors.surface }]}>
-              <Text style={{ color: colors.onSurface, fontSize: 15 }}>{timeLabel(time)}</Text>
+              <Text style={{ color: colors.onSurface, fontSize: 15, flex: 1, flexShrink: 1, marginRight: 8 }}>{timeLabel(time)}</Text>
               <Icon name="chevron-down" size={18} color={colors.muted} footprint={18} />
             </Pressable>
           </View>
-          <View style={{ flex: 1 }}>
+          <View style={stackTimes ? { width: "100%" } : { flex: 1 }}>
             <Label>End time (optional)</Label>
             <Pressable testID="event-end-time" onPress={() => setPickerFor("end")} style={[styles.select, { borderColor: colors.border, backgroundColor: colors.surface }]}>
-              <Text style={{ color: endTime ? colors.onSurface : colors.muted, fontSize: 15 }}>{endTime ? timeLabel(endTime) : "No end time"}</Text>
+              <Text style={{ color: endTime ? colors.onSurface : colors.muted, fontSize: 15, flex: 1, flexShrink: 1, marginRight: 8 }}>{endTime ? timeLabel(endTime) : "No end time"}</Text>
               <Icon name="chevron-down" size={18} color={colors.muted} footprint={18} />
             </Pressable>
           </View>
@@ -349,7 +353,7 @@ const styles = StyleSheet.create({
   wrap: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   pill: { paddingHorizontal: 14, paddingVertical: 9, borderRadius: 999, borderWidth: 1 },
   toggleRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingVertical: 8 },
-  select: { borderWidth: 1, borderRadius: 12, paddingHorizontal: 14, height: 48, flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  select: { borderWidth: 1, borderRadius: 12, paddingHorizontal: 14, minHeight: 48, paddingVertical: 8, flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   backdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "flex-end" },
   sheet: { borderTopLeftRadius: 24, borderTopRightRadius: 24, maxHeight: "70%", paddingBottom: 20 },
   slot: { paddingHorizontal: 18, paddingVertical: 14, borderBottomWidth: 1 },

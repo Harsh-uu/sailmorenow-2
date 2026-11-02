@@ -343,14 +343,14 @@ export default function Hub() {
               row.static ? (
                 <View style={styles.monthHeader} testID={`group-${row.k}`}>
                   <Text style={[styles.monthTitle, { color: colors.onSurface, flex: 1 }]} numberOfLines={2} maxFontSizeMultiplier={1.4}>{row.label}</Text>
-                  <Text style={{ color: colors.muted, fontSize: 12.5 }} maxFontSizeMultiplier={1.4}>{row.count}</Text>
+                  <Text style={{ color: colors.muted, fontSize: 12.5 }} maxFontSizeMultiplier={1.2}>{row.count}</Text>
                 </View>
               ) : (
                 <Pressable testID={`month-toggle-${row.k}`} onPress={() => setCollapsedMonths((m) => ({ ...m, [row.k]: !isMonthCollapsed(row.k) }))}
                   style={styles.monthHeader}>
                   <Icon name={isMonthCollapsed(row.k) ? "chevron-forward" : "chevron-down"} size={18} color={colors.onSurface} footprint={18} />
-                  <Text style={[styles.monthTitle, { color: colors.onSurface }]}>{row.label}</Text>
-                  <Text style={{ color: colors.muted, fontSize: 12.5 }}>{row.count}</Text>
+                  <Text style={[styles.monthTitle, { color: colors.onSurface, flex: 1 }]} numberOfLines={2} maxFontSizeMultiplier={1.4}>{row.label}</Text>
+                  <Text style={{ color: colors.muted, fontSize: 12.5 }} maxFontSizeMultiplier={1.2}>{row.count}</Text>
                 </Pressable>
               )
             ) : (
@@ -444,7 +444,7 @@ function HubCard({ item, rx, onPress, onReact, expanded, onOpenFull, onCompose, 
     finally { setFoundBusy(false); }
   };
   const kindLabel: Record<string, string> = { post: "Post", forum: "Forum", blog: "Blog", event: "Volunteer", crew_open: "Crew", crew_standalone: "Crew" };
-  const title = item.title || item.event_title || `${item.user_name || "Sailor"} — crew available`;
+  const title = item.title || item.event_title || `${item.user_name || "Sailor"} - crew available`;
   const body = item.body || item.note || (item.positions ? `Positions: ${(item.positions || []).join(", ")}` : "");
   const author = item.author_name || item.user_name || item.organizer_name;
   const when = item.created_at || item.event_starts_at || item.starts_at;
@@ -566,7 +566,7 @@ const styles = StyleSheet.create({
   body: { fontSize: 14, lineHeight: 20 },
   cardFoot: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 10 },
   reactBtn: { flexDirection: "row", alignItems: "center", gap: 6, marginLeft: 14 },
-  monthHeader: { flexDirection: "row", alignItems: "center", gap: 8, paddingVertical: 8, marginBottom: 2 },
+  monthHeader: { flexDirection: "row", alignItems: "center", gap: 8, paddingVertical: 8, marginBottom: 2, paddingRight: 64 },
   monthTitle: { flex: 1, fontSize: 16, fontWeight: "800", letterSpacing: -0.2 },
   fab: { position: "absolute", right: 20, bottom: 24, width: 58, height: 58, borderRadius: 29, alignItems: "center", justifyContent: "center", shadowColor: "#000", shadowOpacity: 0.25, shadowRadius: 8, shadowOffset: { width: 0, height: 4 }, elevation: 6 },
   backdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.4)", justifyContent: "flex-end" },

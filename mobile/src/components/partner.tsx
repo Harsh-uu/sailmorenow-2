@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Image, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Image, PixelRatio, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { Icon } from "@/src/components/Icon";
 import { router } from "expo-router";
 import { useTheme } from "@/src/theme";
@@ -146,6 +146,9 @@ export function RenewalReminder() {
 export function FoundingWall() {
   const { colors } = useTheme();
   const [founders, setFounders] = useState<any[]>([]);
+  // At large accessibility text, give each card more room so names and markets
+  // can wrap to 2 lines instead of truncating or clipping at the card edge.
+  const cardW = PixelRatio.getFontScale() > 1.3 ? 188 : 120;
   useEffect(() => {
     api.get("/founding-partners").then((d: any) => setFounders(d.founders || [])).catch(() => {});
   }, []);
@@ -156,9 +159,9 @@ export function FoundingWall() {
         <Icon name="star" size={14} color={colors.accent}  footprint={14}/>
         <Text style={{ color: colors.accent, fontSize: 12, fontWeight: "800", letterSpacing: 0.4, textTransform: "uppercase" }}>Founding Partners</Text>
       </View>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 12, paddingRight: 8 }}>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 12, paddingRight: 16 }}>
         {founders.map((f) => (
-          <Pressable key={f.handle || f.name} testID={`founder-${f.handle || f.name}`} onPress={() => f.handle && router.push(`/partners/${f.handle}` as any)} style={{ width: 120, alignItems: "center", backgroundColor: colors.surface, borderRadius: 16, borderWidth: 1, borderColor: colors.border, padding: 12 }}>
+          <Pressable key={f.handle || f.name} testID={`founder-${f.handle || f.name}`} onPress={() => f.handle && router.push(`/partners/${f.handle}` as any)} style={{ width: cardW, alignItems: "center", backgroundColor: colors.surface, borderRadius: 16, borderWidth: 1, borderColor: colors.border, padding: 12 }}>
             <View>
               {f.avatar || f.picture
                 ? <Image accessibilityLabel={`${f.name || "Member"}'s avatar`} source={{ uri: f.avatar || f.picture }} style={{ width: 52, height: 52, borderRadius: 999 }} />
@@ -168,7 +171,7 @@ export function FoundingWall() {
               </View>
             </View>
             <Text numberOfLines={2} style={{ color: colors.onSurface, fontSize: 12, fontWeight: "700", textAlign: "center", marginTop: 8 }}>{f.name}</Text>
-            {f.primary_market ? <Text numberOfLines={1} style={{ color: colors.muted, fontSize: 10, marginTop: 2 }}>{f.primary_market}</Text> : null}
+            {f.primary_market ? <Text numberOfLines={2} style={{ color: colors.muted, fontSize: 10, marginTop: 2, textAlign: "center" }}>{f.primary_market}</Text> : null}
           </Pressable>
         ))}
       </ScrollView>

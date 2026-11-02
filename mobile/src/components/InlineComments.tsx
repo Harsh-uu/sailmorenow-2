@@ -130,7 +130,7 @@ export function InlineComments({ targetId, allowComments = true, onCount, onComp
       {comments == null ? (
         <ActivityIndicator style={{ marginTop: 10 }} color={colors.teal} />
       ) : top.length === 0 ? (
-        <Text style={{ color: colors.muted, marginTop: 8, fontSize: 13 }}>{allowComments ? "No comments yet — start the conversation." : "Comments are turned off."}</Text>
+        <Text style={{ color: colors.muted, marginTop: 8, fontSize: 13 }}>{allowComments ? "No comments yet - start the conversation." : "Comments are turned off."}</Text>
       ) : (
         top.map((c) => renderC(c))
       )}

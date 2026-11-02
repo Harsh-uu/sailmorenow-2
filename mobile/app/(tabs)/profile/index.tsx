@@ -170,7 +170,7 @@ export default function Profile() {
     return () => sub.remove();
   }, [loadListings]);
   const relist = async (id: string) => {
-    try { await api.post(`/posts/${id}/sold`, {}); toast.success("Relisted — live for 30 more days"); loadListings(); }
+    try { await api.post(`/posts/${id}/sold`, {}); toast.success("Relisted - live for 30 more days"); loadListings(); }
     catch { toast.error("Couldn't relist"); }
   };
 
@@ -395,7 +395,7 @@ export default function Profile() {
       toast.success("Photo updated");
     } catch (e) {
       console.warn("avatar upload error", e);
-      toast.error(`Couldn't update photo ${e instanceof Error ? "— " + e.message : ""}`.trim());
+      toast.error(`Couldn't update photo ${e instanceof Error ? "- " + e.message : ""}`.trim());
     } finally {
       setUploading(false);
     }

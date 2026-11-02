@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Image, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Image, PixelRatio, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Redirect, router, useLocalSearchParams } from "expo-router";
 import { LinearGradient } from "expo-linear-gradient";
@@ -137,6 +137,10 @@ export default function Index() {
   if (user) return <Redirect href="/(tabs)/feed" />;
 
   const path = PATHS[pathIdx];
+  // At large accessibility text the 2-column "What you get" cards break words
+  // mid-word (narrow columns). Above this font scale, switch to a single column
+  // so every title wraps at word boundaries with room to spare.
+  const singleCol = PixelRatio.getFontScale() >= 1.3;
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.surfaceSecondary }}>
@@ -158,7 +162,7 @@ export default function Index() {
               <Button title="Sign in" variant="secondary" icon="log-in-outline" onPress={() => router.push("/signin")} testID="signin-btn" />
               <Pressable onPress={login} disabled={signingIn} testID="google-signin-btn" style={styles.googleBtn}>
                 <Icon name="logo-google" size={18} color="#fff"  footprint={18}/>
-                <Text style={styles.googleText}>{signingIn ? "Opening…" : "Continue with Google"}</Text>
+                <Text numberOfLines={2} maxFontSizeMultiplier={1.2} style={styles.googleText}>{signingIn ? "Opening…" : "Continue with Google"}</Text>
               </Pressable>
             </View>
             <Text style={styles.legal}>Free for sailors, owners & organizations{"\n"}Boat Pros from $19.99/mo</Text>
@@ -188,7 +192,7 @@ export default function Index() {
           <Text style={[styles.h2, { color: colors.onSurface }]}>One hub for every part of PNW sailing life.</Text>
           <View style={styles.featGrid}>
             {FEATURES.map((f) => (
-              <View key={f.title} style={[styles.featCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+              <View key={f.title} style={[styles.featCard, { width: singleCol ? "100%" : "47.5%", backgroundColor: colors.surface, borderColor: colors.border }]}>
                 <View style={[styles.featIcon, { backgroundColor: colors.teal + "22" }]}>
                   <Icon name={f.icon} size={20} tone="brand" footprint={20} />
                 </View>
@@ -250,7 +254,7 @@ export default function Index() {
             <View style={[styles.upgradeBlock, { borderColor: colors.border, backgroundColor: colors.accent + "0F" }]} testID={`path-upgrade-${path.key}`}>
               <View style={styles.upgradeHead}>
                 <Icon name={path.partner ? "ribbon-outline" : "rocket-outline"} size={16} color={colors.accent}  footprint={16}/>
-                <Text style={[styles.upgradeTitle, { color: colors.accent }, path.partner && styles.upgradeTitlePartner]}>{path.premiumTitle}</Text>
+                <Text style={[styles.upgradeTitle, { color: colors.accent, flex: 1 }, path.partner && styles.upgradeTitlePartner]}>{path.premiumTitle}</Text>
               </View>
               {path.premiumNote ? <Text style={[styles.upgradeNote, { color: colors.onSurfaceSecondary }]}>{path.premiumNote}</Text> : null}
               <View style={{ gap: 8, marginTop: 10 }}>
@@ -282,7 +286,7 @@ export default function Index() {
           <Button title="Create your account" icon="person-add-outline" onPress={() => router.push("/register")} testID="cta-create-btn" style={{ marginTop: 16 }} />
           <Pressable onPress={login} disabled={signingIn} testID="cta-google-btn" style={styles.googleBtn}>
             <Icon name="logo-google" size={18} color="#fff"  footprint={18}/>
-            <Text style={styles.googleText}>{signingIn ? "Opening…" : "Continue with Google"}</Text>
+            <Text numberOfLines={2} maxFontSizeMultiplier={1.2} style={styles.googleText}>{signingIn ? "Opening…" : "Continue with Google"}</Text>
           </Pressable>
         </View>
       </ScrollView>
@@ -300,8 +304,8 @@ const styles = StyleSheet.create({
   h1Accent: { color: "#F2A03B" },
   sub: { color: "#CBD5E1", fontSize: 15, lineHeight: 22, marginTop: 14 },
   actions: { marginTop: 22, gap: 12 },
-  googleBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, height: 50, borderRadius: 999, borderWidth: 1.5, borderColor: "rgba(255,255,255,0.5)", marginTop: 12 },
-  googleText: { color: "#fff", fontWeight: "700", fontSize: 16 },
+  googleBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, minHeight: 50, paddingVertical: 10, paddingHorizontal: 16, borderRadius: 999, borderWidth: 1.5, borderColor: "rgba(255,255,255,0.5)", marginTop: 12 },
+  googleText: { color: "#fff", fontWeight: "700", fontSize: 16, flexShrink: 1, textAlign: "center" },
   legal: { color: "#94A3B8", fontSize: 12.5, textAlign: "center", marginTop: 14 },
 
   section: { paddingHorizontal: 20, paddingTop: 28 },
@@ -324,7 +328,7 @@ const styles = StyleSheet.create({
   perkText: { fontSize: 14, fontWeight: "600", flex: 1 },
 
   upgradeBlock: { borderRadius: 16, borderWidth: 1, padding: 14, marginTop: 16 },
-  upgradeHead: { flexDirection: "row", alignItems: "center", gap: 6 },
+  upgradeHead: { flexDirection: "row", alignItems: "flex-start", gap: 6 },
   upgradeTitle: { fontSize: 13, fontWeight: "800", letterSpacing: 0.3, textTransform: "uppercase" },
   upgradeTitlePartner: { fontSize: 15.5, letterSpacing: -0.2, textTransform: "none" },
   upgradeNote: { fontSize: 12.5, lineHeight: 17, marginTop: 6 },
