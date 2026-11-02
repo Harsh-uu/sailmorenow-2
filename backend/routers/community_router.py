@@ -123,7 +123,7 @@ async def list_posts(market: Optional[str] = None, type: Optional[str] = None,
     if author_ids:
         users = await db.users.find({"user_id": {"$in": author_ids}},
                                     {"_id": 0, "user_id": 1, "account_type": 1, "handle": 1,
-                                     "identity_verified": 1, "subscription_tier": 1,
+                                     "name": 1, "identity_verified": 1, "subscription_tier": 1,
                                      "founding_partner": 1, "last_active_at": 1}).to_list(None)
         umap = {u["user_id"]: u for u in users}
         for d in docs:
@@ -138,6 +138,9 @@ async def list_posts(market: Optional[str] = None, type: Optional[str] = None,
                 continue
             d["author_account_type"] = au.get("account_type") or d.get("author_account_type")
             d["author_handle"] = au.get("handle") or d.get("author_handle")
+            # Show the live display name; fall back to the stored name if the
+            # user record is gone (deleted account) so it's never blank.
+            d["author_name"] = au.get("name") or d.get("author_name")
             d["author_verified"] = bool(au.get("identity_verified"))
             d["author_last_active_at"] = au.get("last_active_at")
             d["author_partner_badge"] = partner_badge(au)
@@ -1346,13 +1349,14 @@ async def list_registrations(event_id: str,
         if uids:
             async for pu in db.users.find(
                 {"user_id": {"$in": uids}},
-                {"_id": 0, "user_id": 1, "handle": 1, "public_phone": 1, "phone": 1},
+                {"_id": 0, "user_id": 1, "handle": 1, "public_phone": 1, "phone": 1, "name": 1},
             ):
                 profiles[pu["user_id"]] = pu
         for r in regs:
             pu = profiles.get(r.get("user_id")) or {}
             r["user_handle"] = pu.get("handle")
             r["user_phone"] = pu.get("public_phone") or pu.get("phone")
+            r["user_name"] = pu.get("name") or r.get("user_name")
         return {"scope": "full", "registrations": regs}
     mine = await db.event_registrations.find_one({"event_id": event_id, "user_id": u["user_id"]}, {"_id": 0})
     counts = {"attendee": 0, "volunteer": 0}
@@ -1371,11 +1375,12 @@ async def _hydrate_crew_verified(entries: List[Dict[str, Any]]) -> List[Dict[str
     ids = list({e.get("user_id") for e in entries if e.get("user_id")})
     if ids:
         rows = {u["user_id"]: u async for u in db.users.find(
-            {"user_id": {"$in": ids}}, {"_id": 0, "user_id": 1, "identity_verified": 1, "handle": 1})}
+            {"user_id": {"$in": ids}}, {"_id": 0, "user_id": 1, "identity_verified": 1, "handle": 1, "name": 1})}
         for e in entries:
             row = rows.get(e.get("user_id")) or {}
             e["user_verified"] = bool(row.get("identity_verified"))
             e["user_handle"] = row.get("handle")
+            e["user_name"] = row.get("name") or e.get("user_name")
     else:
         for e in entries:
             e["user_verified"] = False
@@ -1490,10 +1495,12 @@ async def list_event_crew(event_id: str,
     entries = await db.crew_bank.find({"event_id": event_id}, {"_id": 0}).sort("created_at", 1).to_list(200)
     handle_ids = list({e.get("user_id") for e in entries if e.get("user_id")})
     if handle_ids:
-        handles = {r["user_id"]: r.get("handle") async for r in db.users.find(
-            {"user_id": {"$in": handle_ids}}, {"_id": 0, "user_id": 1, "handle": 1})}
+        rows = {r["user_id"]: r async for r in db.users.find(
+            {"user_id": {"$in": handle_ids}}, {"_id": 0, "user_id": 1, "handle": 1, "name": 1})}
         for e in entries:
-            e["user_handle"] = handles.get(e.get("user_id"))
+            row = rows.get(e.get("user_id")) or {}
+            e["user_handle"] = row.get("handle")
+            e["user_name"] = row.get("name") or e.get("user_name")
     mine = None
     for e in entries:
         if u and e["user_id"] == u["user_id"]:
@@ -1721,12 +1728,14 @@ async def list_comments(post_id: str):
     docs = await db.comments.find({"post_id": post_id, "hidden_pending_review": {"$ne": True}}, {"_id": 0}).sort("created_at", 1).to_list(500)
     author_ids = list({c.get("author_id") for c in docs if c.get("author_id")})
     if author_ids:
-        handles = {r["user_id"]: r.get("handle") async for r in db.users.find(
-            {"user_id": {"$in": author_ids}}, {"_id": 0, "user_id": 1, "handle": 1})}
+        rows = {r["user_id"]: r async for r in db.users.find(
+            {"user_id": {"$in": author_ids}}, {"_id": 0, "user_id": 1, "handle": 1, "name": 1})}
         for c in docs:
             if c.get("author_identity") == "business":
                 continue  # keep stored business handle/name/avatar
-            c["author_handle"] = handles.get(c.get("author_id"))
+            row = rows.get(c.get("author_id")) or {}
+            c["author_handle"] = row.get("handle")
+            c["author_name"] = row.get("name") or c.get("author_name")
     return docs
 
 

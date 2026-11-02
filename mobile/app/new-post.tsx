@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Alert, DeviceEventEmitter, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { Alert, DeviceEventEmitter, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 
 import { Screen } from "@/src/components/Screen";
@@ -196,18 +196,14 @@ export default function NewPost() {
               />
             </View>
             <Label>Condition</Label>
-            <View style={styles.wrap}>
-              {CONDITIONS.map((c) => (
-                <Pressable
-                  key={c}
-                  testID={`post-condition-${c}`}
-                  onPress={() => setCondition(c)}
-                  style={[styles.pill, { borderColor: condition === c ? colors.teal : colors.border, backgroundColor: condition === c ? colors.tealSoft : colors.surface }]}
-                >
-                  <Text style={{ color: colors.onSurfaceSecondary, fontWeight: "600", fontSize: 13 }}>{c}</Text>
-                </Pressable>
-              ))}
-            </View>
+            <Picker
+              testID="post-condition-picker"
+              title="Choose a condition"
+              placeholder="Select a condition"
+              value={condition}
+              options={CONDITIONS.map((c) => ({ value: c, label: c }))}
+              onChange={(v) => setCondition(v)}
+            />
           </>
         ) : null}
 
@@ -233,8 +229,6 @@ function Label({ children }: { children: string }) {
 
 const styles = StyleSheet.create({
   label: { fontSize: 15, fontWeight: "800", marginTop: 20, marginBottom: 10 },
-  wrap: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
-  pill: { paddingHorizontal: 14, paddingVertical: 9, borderRadius: 999, borderWidth: 1 },
   input: { borderWidth: 1, borderRadius: 12, paddingHorizontal: 14, height: 50, fontSize: 15 },
   textarea: { borderWidth: 1, borderRadius: 12, padding: 14, minHeight: 120, textAlignVertical: "top", fontSize: 15 },
 });

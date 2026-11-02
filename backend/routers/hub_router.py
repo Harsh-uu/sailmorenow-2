@@ -319,10 +319,15 @@ async def list_discussions(kind: Optional[str] = None, market: Optional[str] = N
             d["comment_count"] = counts.get(d.get("id"), 0)
     author_ids = list({d.get("author_id") for d in docs if d.get("author_id")})
     if author_ids:
-        handles = {r["user_id"]: r.get("handle") async for r in db.users.find(
-            {"user_id": {"$in": author_ids}}, {"_id": 0, "user_id": 1, "handle": 1})}
+        rows = {r["user_id"]: r async for r in db.users.find(
+            {"user_id": {"$in": author_ids}}, {"_id": 0, "user_id": 1, "handle": 1, "name": 1})}
         for d in docs:
-            d["author_handle"] = handles.get(d.get("author_id"))
+            row = rows.get(d.get("author_id")) or {}
+            d["author_handle"] = row.get("handle")
+            # Business-identity posts keep their stored business name; personal
+            # posts show the live display name, falling back to the stored name.
+            if d.get("author_identity") != "business":
+                d["author_name"] = row.get("name") or d.get("author_name")
     uid = u["user_id"] if u else None
     for d in docs:
         mine = bool(uid and d.get("author_id") == uid)
@@ -344,8 +349,9 @@ async def get_discussion(disc_id: str,
             raise HTTPException(status_code=404, detail="Not found")
     d["comment_count"] = await db.comments.count_documents({"post_id": disc_id})
     if d.get("author_id") and d.get("author_identity") != "business":
-        au = await db.users.find_one({"user_id": d["author_id"]}, {"_id": 0, "handle": 1})
+        au = await db.users.find_one({"user_id": d["author_id"]}, {"_id": 0, "handle": 1, "name": 1})
         d["author_handle"] = (au or {}).get("handle")
+        d["author_name"] = (au or {}).get("name") or d.get("author_name")
     _viewer = await current_user_from_token(session_token, authorization)
     _mine = bool(_viewer and d.get("author_id") == _viewer["user_id"])
     d["can_edit"] = _mine

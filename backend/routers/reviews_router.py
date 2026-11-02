@@ -742,6 +742,15 @@ async def reviews_list(target_id: str, limit: int = 20, offset: int = 0, identit
             "business_name": (pr or {}).get("company_name") if pr else None,
             "business_logo": ((pr or {}).get("logo_url") or (pr or {}).get("photo_url")) if pr else None,
             "business_listing_id": pr["user_id"] if pr else None}
+    # The reply is authored by the reviewed party (target). Show their live name
+    # on the "Reply from ..." line, falling back to the stored name if gone.
+    if any(it.get("reply") for it in page):
+        tgt = await db.users.find_one({"user_id": target_id}, {"_id": 0, "name": 1})
+        tgt_name = (tgt or {}).get("name")
+        for it in page:
+            rep = it.get("reply")
+            if rep and tgt_name:
+                rep["author_name"] = tgt_name
     summary = await compute_summary(target_id, rows, identity=identity)
     return {"summary": summary, "count": total, "limit": limit, "offset": offset, "reviews": page}
 

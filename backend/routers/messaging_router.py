@@ -290,7 +290,19 @@ async def list_messages(thread_id: str,
     msgs = await db.dm_messages.find({"thread_id": thread_id}, {"_id": 0}).sort("created_at", 1).to_list(500)
     # Hide messages the caller deleted "for me"; keep "deleted for everyone" rows
     # (with an empty body) so the client can render "This message was deleted".
-    return [m for m in msgs if u["user_id"] not in (m.get("deleted_for") or [])]
+    visible = [m for m in msgs if u["user_id"] not in (m.get("deleted_for") or [])]
+    # Group bubbles show the sender's name: refresh from the live user so a
+    # renamed sender reads correctly. Business-identity messages keep their
+    # stored business name; a deleted sender falls back to the stored name.
+    sender_ids = list({m.get("from_id") for m in visible
+                       if m.get("from_id") and m.get("author_identity") != "business"})
+    if sender_ids:
+        names = {r["user_id"]: r.get("name") async for r in db.users.find(
+            {"user_id": {"$in": sender_ids}}, {"_id": 0, "user_id": 1, "name": 1})}
+        for m in visible:
+            if m.get("author_identity") != "business":
+                m["from_name"] = names.get(m.get("from_id")) or m.get("from_name")
+    return visible
 
 
 @router.delete("/messages/item/{message_id}")
