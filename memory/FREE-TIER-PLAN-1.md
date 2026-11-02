@@ -318,3 +318,69 @@ Everything else from the five questions is RESOLVED above.
 EMAIL-TRIAL-1 is blocked on this: its Free-column copy and comparison tables must
 reflect free post/comment/react (now including hub forum/blog, and now covering
 free Boat Pro) before those emails are built.
+
+================================================================================
+## 10) FREE ORG capability check vs public wording (PLAN ONLY, no org rule change)
+Public claim audited (Landing.jsx:79 / mobile app/index.tsx:100):
+"Post 1 volunteer event and 1 update each calendar month".
+
+1) Event / volunteer opportunity - 1 per calendar month enforced? YES.
+   - File: backend/routers/community_router.py, create_event.
+   - Non-volunteer events are BLOCKED entirely for free orgs: :719-726 (if
+     account_type == partner and not body.is_volunteer -> 402 upgrade_required,
+     "Free organizations can post volunteer opportunities only...").
+   - Volunteer events capped at 1 / calendar month: :727-733 - counts
+     db.events where organizer_id == user, is_volunteer == True, created_at >=
+     start-of-month; used >= 1 -> 402 ("Free organizations get 1 volunteer event
+     a month...") at :730.
+   - Also a generic per-IP hourly cap (10/hr, all accounts) at :702 - not a plan
+     limit.
+   - VERDICT: MATCHES "1 volunteer event ... each calendar month".
+
+2) Feed update (post) - 1 per month enforced? YES.
+   - File: backend/routers/community_router.py, create_post, :159-169 - counts
+     db.posts where author_id == user, created_at >= start-of-month; used >= 1 ->
+     402 ("Free organizations get 1 feed post a month...") at :165-169.
+   - IMPORTANT: marketplace / For-Sale posts go through the SAME db.posts path, so
+     they COUNT toward that one monthly post (confirmed by plan_features.py:230 and
+     the marketplace row ~:234). The public "1 update" line does not mention this
+     shared quota.
+   - VERDICT: MATCHES "1 update each calendar month" (same calendar-month, start-of-
+     month reset), with the marketplace nuance noted below.
+
+3) Hub forum / blog (hub_router.py:381-386) - fully blocked or limited for free orgs?
+   - FULLY BLOCKED, not limited. :381-386: if account_type == partner and
+     org_status(u) == "free" -> 403 ("Free organizations cannot post forums or
+     blogs. Community Partner organizations can."). There is NO monthly allowance
+     for free-org hub posts (unlike feed posts and volunteer events).
+   - VERDICT: no public page promises free-org hub posting, so no false promise;
+     but note the asymmetry (feed/event = 1/month, hub = 0).
+
+4) Everywhere the org wording appears:
+   - Public landing page: frontend/src/pages/Landing.jsx:79.
+   - Mobile landing: mobile/app/index.tsx:100 (identical string).
+   - Plan matrix (SOURCE of Pricing / My plan / PlanComparison, served by
+     GET /api/plans/matrix): backend/plan_features.py - events_per_month :224-228,
+     feed_posts_per_month :229-233, marketplace ~:234, gallery_photos :219-223.
+     PlanComparison.jsx and the Pricing/MyPlan pages render FROM this matrix (no
+     hardcoded org copy found in PlanComparison.jsx).
+   - Org welcome email: backend/email_templates/welcome-club-org.html:65 - states
+     "Free organizations can post one volunteer event per month. Community Partners
+     can post unlimited events." and a "Share updates in the feed" block.
+   - FAQ (backend/routers/content_router.py seed): no free-org volunteer / feed-post
+     monthly-limit wording found (nothing to reconcile there today).
+
+MISMATCHES / GAPS found (reporting only; no change made):
+- M1 (minor, ambiguity): public page + mobile say "1 update each calendar month"
+  but omit that MARKETPLACE / For-Sale posts also consume that single monthly post
+  (code + matrix confirm they do). Technically accurate (it is 1 feed post) but a
+  free org that lists an item for sale uses up its monthly "update". Consider a
+  clarifying note someday - NOT changing now.
+- M2 (minor, omission): welcome-club-org.html states the volunteer-event monthly
+  cap but its "Share updates in the feed" block does NOT mention the 1 feed post /
+  month cap. Incomplete, not a false promise. Noted only.
+- No mismatch on the core "1 volunteer event and 1 update each calendar month"
+  claim - the backend enforces exactly that. Hub is fully blocked (0), and no
+  surface promises free-org hub posting, so no contradiction.
+
+Org rules are UNCHANGED by this audit and by FREE-TIER-PLAN-1 (orgs out of scope).
