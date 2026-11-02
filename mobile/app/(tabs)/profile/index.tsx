@@ -898,7 +898,7 @@ export default function Profile() {
       <Modal visible={mktOpen} animationType="slide" transparent onRequestClose={() => setMktOpen(false)}>
         <View style={styles.mktBackdrop}>
           <View style={[styles.mktSheet, { backgroundColor: colors.surface }]}>
-            <Text style={[styles.mktTitle, { color: colors.onSurface }]}>Markets you follow</Text>
+            <Text numberOfLines={2} maxFontSizeMultiplier={1.3} style={[styles.mktTitle, { color: colors.onSurface }]}>Markets you follow</Text>
             <Text style={{ color: colors.muted, marginBottom: 12 }}>Your Hub & Crew Bank "My markets" view combines everything you follow.</Text>
             <ScrollView style={{ maxHeight: 360 }}>
               {allMarkets.map((m) => {
@@ -906,8 +906,8 @@ export default function Profile() {
                 return (
                   <Pressable key={m} testID={`follow-market-${m}`} onPress={() => toggleMkt(m)} style={styles.mktRow}>
                     <Icon name={on ? "checkbox" : "square-outline"} size={22} color={on ? colors.teal : colors.muted} footprint={22} />
-                    <Text style={{ color: colors.onSurface, fontSize: 16, flex: 1 }}>{m}</Text>
-                    {m === user.primary_market ? <Text style={{ color: colors.muted, fontSize: 12 }}>primary</Text> : null}
+                    <Text style={{ color: colors.onSurface, fontSize: 16, flex: 1, flexShrink: 1 }}>{m}</Text>
+                    {m === user.primary_market ? <Text style={{ color: colors.muted, fontSize: 12, flexShrink: 0, marginLeft: 8 }} numberOfLines={1}>primary</Text> : null}
                   </Pressable>
                 );
               })}
@@ -926,7 +926,7 @@ export default function Profile() {
       <Modal visible={homeMktOpen} animationType="slide" transparent onRequestClose={() => setHomeMktOpen(false)}>
         <View style={styles.mktBackdrop}>
           <View style={[styles.mktSheet, { backgroundColor: colors.surface }]}>
-            <Text style={[styles.mktTitle, { color: colors.onSurface }]}>Home market</Text>
+            <Text numberOfLines={2} maxFontSizeMultiplier={1.3} style={[styles.mktTitle, { color: colors.onSurface }]}>Home market</Text>
             <Text style={{ color: colors.muted, marginBottom: 12 }}>Your primary market. It's automatically added to the markets you follow.</Text>
             <ScrollView style={{ maxHeight: 360 }}>
               {allMarkets.map((m) => {

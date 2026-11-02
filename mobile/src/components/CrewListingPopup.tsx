@@ -120,10 +120,10 @@ export function CrewListingPopup({
               <Avatar uri={entry.user_avatar} name={name} size={56} />
               <View style={{ flex: 1 }}>
                 <View style={{ flexDirection: "row", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
-                  <Text style={{ color: colors.onSurface, fontWeight: "800", fontSize: 18 }}>{name}</Text>
+                  <Text numberOfLines={2} maxFontSizeMultiplier={1.3} style={{ color: colors.onSurface, fontWeight: "800", fontSize: 18, flexShrink: 1 }}>{name}</Text>
                   {entry.user_verified ? <Icon name="verified" size={16} color={colors.teal} footprint={16} /> : null}
                 </View>
-                {marketLine ? <Text style={{ color: colors.muted, fontSize: 12.5, marginTop: 2 }}>{marketLine}</Text> : null}
+                {marketLine ? <Text numberOfLines={2} style={{ color: colors.muted, fontSize: 12.5, marginTop: 2 }}>{marketLine}</Text> : null}
               </View>
               {handle ? <Icon name="chevron-right" size={20} color={colors.borderStrong} footprint={20} /> : null}
             </Pressable>
@@ -202,7 +202,7 @@ export function CrewListingPopup({
             <View style={{ height: 10 }} />
             <Pressable onPress={onClose} testID="crew-detail-close"
               style={{ borderWidth: 1.5, borderColor: colors.borderStrong, borderRadius: 999, paddingVertical: 12, alignItems: "center" }}>
-              <Text style={{ color: colors.onSurface, fontWeight: "800", fontSize: 15 }}>Close</Text>
+              <Text maxFontSizeMultiplier={1.2} style={{ color: colors.onSurface, fontWeight: "800", fontSize: 15 }}>Close</Text>
             </Pressable>
           </View>
         </View>

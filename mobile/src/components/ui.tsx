@@ -235,7 +235,7 @@ export function Card({
 }
 
 // ---- Badge / Chip ---------------------------------------------------------
-export function Badge({ label, tone = "teal" }: { label: string; tone?: "teal" | "accent" | "navy" | "muted" }) {
+export function Badge({ label, tone = "teal", maxScale = 1.2 }: { label: string; tone?: "teal" | "accent" | "navy" | "muted"; maxScale?: number }) {
   const { colors } = useTheme();
   const map = {
     // Use the theme's soft-chip pairings so the label stays legible in BOTH
@@ -247,7 +247,7 @@ export function Badge({ label, tone = "teal" }: { label: string; tone?: "teal" |
   }[tone];
   return (
     <View style={[styles.badge, { backgroundColor: map.bg }]}>
-      <Text numberOfLines={2} maxFontSizeMultiplier={1.2} style={[styles.badgeText, { color: map.fg }]}>{label}</Text>
+      <Text numberOfLines={2} maxFontSizeMultiplier={maxScale} style={[styles.badgeText, { color: map.fg }]}>{label}</Text>
     </View>
   );
 }

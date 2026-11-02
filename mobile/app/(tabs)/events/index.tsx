@@ -155,7 +155,7 @@ export default function Events() {
     return (
       <Pressable key={`d-${iso}`} testID={`cal-day-${dayNum}`} onPress={() => setSelectedDay((p) => (p === iso ? null : iso))} style={styles.calCell}>
         <View style={[styles.calDay, isSel && { backgroundColor: colors.teal }]}>
-          <Text style={{ color: isSel ? colors.onBrandPrimary : colors.onSurface, fontWeight: isSel ? "800" : "600", fontSize: 14 }}>{dayNum}</Text>
+          <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6} maxFontSizeMultiplier={1.3} style={{ color: isSel ? colors.onBrandPrimary : colors.onSurface, fontWeight: isSel ? "800" : "600", fontSize: 14 }}>{dayNum}</Text>
         </View>
         <View style={styles.calDotRow}>
           {dots.map((c, di) => (<View key={di} style={[styles.calDot, { backgroundColor: CAT_COLORS[c] }]} />))}
@@ -181,8 +181,8 @@ export default function Events() {
             <Pressable testID="cal-prev" hitSlop={8} onPress={() => (calView === "month" ? setCalMonth((m) => m.subtract(1, "month")) : setWeekAnchor((w) => w.subtract(1, "week")))}>
               <Icon name="chevron-back" size={22} color={colors.onSurface}  footprint={22}/>
             </Pressable>
-            <Text style={[styles.calMonthLbl, { color: colors.onSurface }]}>
-              {calView === "month" ? calMonth.format("MMMM YYYY") : `${weekAnchor.format("MMM D")} – ${weekAnchor.add(6, "day").format("MMM D")}`}
+            <Text numberOfLines={2} maxFontSizeMultiplier={1.3} style={[styles.calMonthLbl, { color: colors.onSurface, flex: 1, textAlign: "center" }]}>
+              {calView === "month" ? calMonth.format("MMMM YYYY") : `${weekAnchor.format("MMM D")} - ${weekAnchor.add(6, "day").format("MMM D")}`}
             </Text>
             <Pressable testID="cal-next" hitSlop={8} onPress={() => (calView === "month" ? setCalMonth((m) => m.add(1, "month")) : setWeekAnchor((w) => w.add(1, "week")))}>
               <Icon name="chevron-forward" size={22} color={colors.onSurface}  footprint={22}/>
@@ -190,7 +190,7 @@ export default function Events() {
           </View>
           <View style={styles.calWeekRow}>
             {WEEKDAYS.map((w, i) => (
-              <Text key={i} style={[styles.calWeekday, { color: colors.muted }]}>{w}</Text>
+              <Text key={i} maxFontSizeMultiplier={1.3} style={[styles.calWeekday, { color: colors.muted }]}>{w}</Text>
             ))}
           </View>
           <View style={styles.calGrid}>
@@ -352,8 +352,8 @@ const styles = StyleSheet.create({
   calWeekRow: { flexDirection: "row" },
   calWeekday: { flex: 1, textAlign: "center", fontSize: 11, fontWeight: "700" },
   calGrid: { flexDirection: "row", flexWrap: "wrap", marginTop: 4 },
-  calCell: { width: `${100 / 7}%`, alignItems: "center", paddingVertical: 4 },
-  calDay: { width: 34, height: 34, borderRadius: 17, alignItems: "center", justifyContent: "center" },
+  calCell: { width: `${100 / 7}%`, alignItems: "center", paddingVertical: 4, minHeight: 48 },
+  calDay: { minWidth: 34, minHeight: 34, paddingHorizontal: 4, borderRadius: 17, alignItems: "center", justifyContent: "center" },
   calDotRow: { flexDirection: "row", gap: 2, marginTop: 3, height: 6, alignItems: "center" },
   calDot: { width: 5, height: 5, borderRadius: 3 },
   calViewToggle: { flexDirection: "row", gap: 6 },

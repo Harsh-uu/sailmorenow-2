@@ -356,7 +356,7 @@ export default function PostDetail() {
               ) : null
             }
             ListEmptyComponent={
-              <Text style={{ color: colors.muted, textAlign: "center", marginTop: 12 }}>No comments yet — start the conversation.</Text>
+              <Text style={{ color: colors.muted, textAlign: "center", marginTop: 12 }}>No comments yet - start the conversation.</Text>
             }
             renderItem={({ item }) => (
               <View>
@@ -433,6 +433,6 @@ const styles = StyleSheet.create({
   cAuthor: { fontWeight: "700", fontSize: 13.5 },
   cBody: { fontSize: 14.5, lineHeight: 20, marginTop: 3 },
   inputBar: { flexDirection: "row", alignItems: "flex-end", gap: 8, padding: 10, borderTopWidth: 1 },
-  input: { flex: 1, borderRadius: 20, paddingHorizontal: 14, paddingVertical: 10, maxHeight: 100, fontSize: 15 },
-  sendBtn: { paddingHorizontal: 18, height: 42, borderRadius: 21, alignItems: "center", justifyContent: "center" },
+  input: { flex: 1, borderRadius: 20, paddingHorizontal: 14, paddingVertical: 10, minHeight: 42, maxHeight: 120, fontSize: 15 },
+  sendBtn: { paddingHorizontal: 18, minHeight: 42, paddingVertical: 8, borderRadius: 21, alignItems: "center", justifyContent: "center" },
 });

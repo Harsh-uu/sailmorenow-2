@@ -42,7 +42,7 @@ export default function TabsLayout() {
   // bottom safe-area inset, so on Android (edge-to-edge: 3-button or gesture
   // nav) the labels are never pushed under the system navigation bar. The total
   // is never hard-coded. iPhone keeps the same icon-over-label look.
-  const TAB_BASE = 52;
+  const TAB_BASE = 58;
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.surface }}>
@@ -62,16 +62,16 @@ export default function TabsLayout() {
         },
         // Give each label the full slot width (no item padding) so all five fit.
         tabBarItemStyle: { paddingHorizontal: 0 },
-        // One line, no shortening: cap system font scaling AND auto-shrink to fit
-        // so even at Android "Display size: Large" the long labels ("Pros/Orgs",
-        // "Messages") stay on one line inside their slot.
+        // iOS fix: adjustsFontSizeToFit + numberOfLines 1 shrinks WIDTH but the
+        // glyph line box stays tall and the tab slot clipped descenders (g, q, s)
+        // on device. Instead: cap hard at 1.1x, give an explicit lineHeight +
+        // paddingBottom so descenders have room, and keep one line. TAB_BASE was
+        // raised to 58 so the taller label still fits above the safe-area inset.
         tabBarLabel: ({ color, children }) => (
           <Text
             numberOfLines={1}
-            adjustsFontSizeToFit
-            minimumFontScale={0.7}
-            maxFontSizeMultiplier={1.15}
-            style={{ fontSize: 11, fontWeight: "600", color, textAlign: "center", width: "100%", paddingHorizontal: 1, paddingBottom: 2, includeFontPadding: false }}
+            maxFontSizeMultiplier={1.1}
+            style={{ fontSize: 11, lineHeight: 16, fontWeight: "600", color, textAlign: "center", width: "100%", paddingHorizontal: 1, paddingBottom: 3 }}
           >
             {children}
           </Text>

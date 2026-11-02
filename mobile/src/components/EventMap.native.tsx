@@ -1,4 +1,4 @@
-import { StyleSheet, View } from "react-native";
+import { StyleSheet, Text, View } from "react-native";
 import MapView from "react-native-map-clustering";
 import { Marker, PROVIDER_DEFAULT, UrlTile } from "react-native-maps";
 
@@ -25,6 +25,17 @@ export default function EventMap({ events, onOpen }: { events: Ev[]; onOpen?: (i
         clusterTextColor="#ffffff"
         radius={48}
         spiralEnabled
+        renderCluster={(cluster: any) => {
+          const { id, geometry, onPress, properties } = cluster;
+          const count = properties.point_count;
+          return (
+            <Marker key={`cluster-${id}`} coordinate={{ longitude: geometry.coordinates[0], latitude: geometry.coordinates[1] }} onPress={onPress}>
+              <View style={styles.cluster}>
+                <Text allowFontScaling={false} style={styles.clusterText} numberOfLines={1}>{count}</Text>
+              </View>
+            </Marker>
+          );
+        }}
       >
         <UrlTile urlTemplate="https://tile.openstreetmap.org/{z}/{x}/{y}.png" maximumZ={19} flipY={false} />
         {pinned.map((e) => (
@@ -43,4 +54,6 @@ export default function EventMap({ events, onOpen }: { events: Ev[]; onOpen?: (i
 
 const styles = StyleSheet.create({
   wrap: { height: 460, borderRadius: 18, overflow: "hidden", margin: 16, marginTop: 8 },
+  cluster: { minWidth: 36, height: 36, paddingHorizontal: 6, borderRadius: 18, backgroundColor: "#1F3F5B", alignItems: "center", justifyContent: "center", borderWidth: 2, borderColor: "#ffffff" },
+  clusterText: { color: "#ffffff", fontWeight: "800", fontSize: 13 },
 });

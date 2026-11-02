@@ -227,7 +227,7 @@ export default function HubDetail() {
               </View>
             }
             ListEmptyComponent={
-              <Text style={{ color: colors.muted, textAlign: "center", marginTop: 12 }}>No comments yet — start the conversation.</Text>
+              <Text style={{ color: colors.muted, textAlign: "center", marginTop: 12 }}>No comments yet - start the conversation.</Text>
             }
             renderItem={({ item }) => (
               <View style={styles.commentRow}>
