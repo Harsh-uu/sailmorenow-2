@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
-import { DeviceEventEmitter, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { DeviceEventEmitter, StyleSheet, Text, TextInput, View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 
-import { ButtonRow, Loading } from "@/src/components/ui";
+import { ButtonRow, Loading, Picker } from "@/src/components/ui";
 import { KeyboardFormScreen, useKbField } from "@/src/components/KeyboardFormScreen";
 import { MultiPhotoPicker } from "@/src/components/MultiPhotoPicker";
 import { api, ApiError } from "@/src/lib/api";
@@ -132,18 +132,14 @@ export default function EditPostScreen() {
       </View>
 
       <Label>Condition</Label>
-      <View style={styles.wrap}>
-        {CONDITIONS.map((c) => (
-          <Pressable
-            key={c}
-            testID={`edit-condition-${c}`}
-            onPress={() => setCondition(c === condition ? "" : c)}
-            style={[styles.pill, { borderColor: condition === c ? colors.teal : colors.border, backgroundColor: condition === c ? colors.tealSoft : colors.surface }]}
-          >
-            <Text style={{ color: colors.onSurfaceSecondary, fontWeight: "600", fontSize: 13 }}>{c}</Text>
-          </Pressable>
-        ))}
-      </View>
+      <Picker
+        testID="edit-condition-picker"
+        title="Choose a condition"
+        placeholder="Select a condition"
+        value={condition}
+        options={CONDITIONS.map((c) => ({ value: c, label: c }))}
+        onChange={(v) => setCondition(v)}
+      />
 
       <Label>Photos (up to 6)</Label>
       <MultiPhotoPicker value={gallery} onChange={setGallery} max={6} />
@@ -158,8 +154,6 @@ function Label({ children }: { children: string }) {
 
 const styles = StyleSheet.create({
   label: { fontSize: 15, fontWeight: "800", marginTop: 20, marginBottom: 10 },
-  wrap: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
-  pill: { paddingHorizontal: 14, paddingVertical: 9, borderRadius: 999, borderWidth: 1 },
   input: { borderWidth: 1, borderRadius: 12, paddingHorizontal: 14, height: 50, fontSize: 15 },
   textarea: { borderWidth: 1, borderRadius: 12, padding: 14, minHeight: 120, textAlignVertical: "top", fontSize: 15 },
 });
