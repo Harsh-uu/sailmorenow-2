@@ -62,6 +62,8 @@ FAQ_SEED: List[Dict[str, Any]] = [
      "answer": "Browse events in your markets or all markets, RSVP, and message the hosting club. Clubs can post volunteer opportunities with contact details."},
     {"category": "Community", "question": "How do I contact support?",
      "answer": "Use the Help form in the app and we will reply by email within 48 hours."},
+    {"category": "Getting Started", "question": "How do I delete my account?",
+     "answer": "Open Settings on the web, or Profile in the app, and scroll to the very bottom. Choose Delete account. We email you a 6-digit code, and you confirm by entering it and typing DELETE. Deleting removes your profile, posts, comments, listings, reviews, messages and photos. We keep a small set of records we are required to retain, with your name and contact details removed. If you subscribe through the App Store or Google Play, cancel in the store too. This cannot be undone."},
 ]
 
 CATEGORY_ORDER = [

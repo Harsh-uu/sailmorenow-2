@@ -957,6 +957,44 @@ def welcome_member_email_html(*, account_type: Optional[str] = None,
     html = _re.sub(r"<!--(?:STORE_ROW|APP_BTN|PLAY_BTN)_(?:START|END)-->", "", html)
     return html
 
+def account_delete_code_email_html(*, code: str, name: Optional[str]) -> str:
+    """6-digit confirmation code for account deletion. Branded shell (navy banner
+    + round logo header + footer applied by send_email). Hyphens only."""
+    spaced = " ".join(list(code or ""))
+    return _billing_shell(
+        eyebrow="Account deletion",
+        title="Confirm you want to delete your account",
+        body_html=(
+            f"<p style='margin:0 0 12px 0;'>Hi {name or 'there'},</p>"
+            "<p style='margin:0 0 16px 0;'>Use this code to confirm you want to delete your "
+            "Sail More Now account. Enter it on the delete screen and type DELETE to finish.</p>"
+            f"<div style='font-size:34px; font-weight:800; letter-spacing:10px; color:#1F3F5B; "
+            f"background:#f4f8fb; border-radius:12px; padding:18px 10px; text-align:center;'>{spaced}</div>"
+            "<p style='margin:16px 0 0 0; font-size:13px; color:#64748b;'>This code expires in 15 minutes. "
+            "If you did not ask to delete your account, ignore this email and nothing will change.</p>"
+        ),
+    )
+
+
+def account_deleted_email_html(*, name: Optional[str]) -> str:
+    """Final confirmation that the account and personal data were removed."""
+    return _billing_shell(
+        eyebrow="Account deletion",
+        title="Your account has been deleted",
+        body_html=(
+            f"<p style='margin:0 0 12px 0;'>Hi {name or 'there'},</p>"
+            "<p style='margin:0 0 16px 0;'>Your Sail More Now account and personal data have been "
+            "removed. This included your profile, posts, comments, listings, reviews, messages and "
+            "photos. We kept only a small set of records we are required to retain, with your name "
+            "and contact details removed.</p>"
+            "<p style='margin:0 0 16px 0;'>If you subscribed through the App Store or Google Play, "
+            "remember to cancel that subscription in the store so you are not charged again.</p>"
+            "<p style='margin:0 0 0 0; font-size:13px; color:#64748b;'>This cannot be undone. You are "
+            "welcome to create a new account any time.</p>"
+        ),
+    )
+
+
 def locked_message_email_html(*, recipient_name: str, sender_name: str, app_url: str) -> str:
     """Sent to a free-tier member when a paid member messages them. The message
     is saved and unlocks the moment they upgrade. Throttled to once / 24h."""

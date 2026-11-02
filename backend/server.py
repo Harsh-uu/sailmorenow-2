@@ -46,6 +46,7 @@ from routers.event_sources_router import router as event_sources_router  # noqa:
 from routers.plans_router import router as plans_router  # noqa: E402
 from routers.review_disputes_router import router as review_disputes_router  # noqa: E402
 from routers.admin_access_router import router as admin_access_router  # noqa: E402
+from routers.account_router import router as account_router  # noqa: E402
 
 logging.basicConfig(level=logging.INFO,
                     format="%(asctime)s %(levelname)s %(name)s :: %(message)s")
@@ -58,7 +59,7 @@ for r in (auth_router, directory_router, community_router,
           reviews_router, admin_router, hub_router, reports_router, ipban_router, identity_router,
           reactions_router, storage_router, follows_router, admin_content_router,
           content_router, demo_router, sponsors_router, event_sources_router,
-          plans_router, review_disputes_router, admin_access_router):
+          plans_router, review_disputes_router, admin_access_router, account_router):
     app.include_router(r, prefix="/api")
 
 app.middleware("http")(ban_middleware)
@@ -282,6 +283,12 @@ async def _startup():
         await db.testimonials.create_index("status")
     except Exception:
         logger.exception("failed to seed FAQs")
+    try:
+        import account_deletion as _ad
+        import asyncio as _adaio
+        _adaio.create_task(_ad.resume_pending_jobs(db))
+    except Exception:
+        logger.exception("failed to schedule account-deletion resume")
     try:
         from storage import init_storage
         await asyncio.to_thread(init_storage)

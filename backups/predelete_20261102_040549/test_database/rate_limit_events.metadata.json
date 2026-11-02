@@ -1,0 +1,1 @@
+{"indexes":[{"v":{"$numberInt":"2"},"key":{"_id":{"$numberInt":"1"}},"name":"_id_"},{"v":{"$numberInt":"2"},"key":{"created_at":{"$numberInt":"1"}},"name":"created_at_1","expireAfterSeconds":{"$numberInt":"2592000"}}],"uuid":"13189b9f234d49e293b04a494400166c","collectionName":"rate_limit_events","type":"collection"}

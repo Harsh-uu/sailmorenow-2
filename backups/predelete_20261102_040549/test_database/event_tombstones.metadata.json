@@ -1,0 +1,1 @@
+{"indexes":[{"v":{"$numberInt":"2"},"key":{"_id":{"$numberInt":"1"}},"name":"_id_"}],"uuid":"7b69b6d2c4bb4187981c7360dc75d0e4","collectionName":"event_tombstones","type":"collection"}

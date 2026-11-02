@@ -19,6 +19,7 @@ import { CropModal } from "@/src/components/CropModal";
 import { useAuth } from "@/src/context/AuthContext";
 import { useNotifications } from "@/src/context/NotificationsContext";
 import { NotificationBell } from "@/src/components/NotificationBell";
+import { DeleteAccountSheet } from "@/src/components/DeleteAccountSheet";
 import { api, ApiError, API, getToken } from "@/src/lib/api";
 import { handleUpgrade } from "@/src/lib/upgrade";
 import { shareLink } from "@/src/lib/share";
@@ -855,6 +856,8 @@ export default function Profile() {
           </View>
 
           {/* MOBILE-KB-4 build stamp - REMOVE BEFORE LAUNCH (app/(tabs)/profile/index.tsx) */}
+          <DeleteAccountSheet />
+
           <View testID="profile-build-stamp" style={{ marginTop: 4, marginBottom: 8 }}>
             <Text style={{ color: colors.muted, fontSize: 10, textAlign: "center" }}>{BUILD_STAMP}</Text>
           </View>

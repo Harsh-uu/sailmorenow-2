@@ -192,6 +192,273 @@ async def dry_run_inventory(db, user_id: str) -> Dict[str, Any]:
             "object_paths": paths, "object_count": len(paths)}
 
 
+FORMER = "Former member"
+
+
+async def _scrub_denormalized_names(db, user_id: str) -> Dict[str, int]:
+    """Clear the member's name on KEPT records that NAMES-1 does not refresh."""
+    out: Dict[str, int] = {}
+    r = await db.notifications.update_many(
+        {"$or": [{"from_id": user_id}, {"actor_id": user_id}]},
+        {"$set": {"from_name": FORMER}})
+    out["notifications.from_name"] = r.modified_count
+    r = await db.comp_grants.update_many(
+        {"granted_by": user_id}, {"$set": {"granted_by_name": FORMER}})
+    out["comp_grants.granted_by_name"] = r.modified_count
+    # events_deleted recovery copies: embedded organizer / RSVPs / crew / deleter
+    r = await db.events_deleted.update_many(
+        {"event.organizer_id": user_id},
+        {"$set": {"event.organizer_name": FORMER, "event.organizer_email": None}})
+    out["events_deleted.organizer"] = r.modified_count
+    r = await db.events_deleted.update_many(
+        {"deleted_by": user_id}, {"$set": {"deleted_by_name": FORMER}})
+    out["events_deleted.deleted_by"] = r.modified_count
+    n = 0
+    async for ed in db.events_deleted.find(
+            {"$or": [{"registrations.user_id": user_id}, {"crew.user_id": user_id}]},
+            {"_id": 1, "registrations": 1, "crew": 1}):
+        for arr in ("registrations", "crew"):
+            for row in (ed.get(arr) or []):
+                if row.get("user_id") == user_id:
+                    row["user_name"] = FORMER
+        await db.events_deleted.update_one({"_id": ed["_id"]}, {"$set": {
+            "registrations": ed.get("registrations") or [], "crew": ed.get("crew") or []}})
+        n += 1
+    out["events_deleted.embedded_rows"] = n
+    r = await db.events_backup_bodfix.update_many(
+        {"organizer_id": user_id}, {"$set": {"organizer_name": FORMER, "organizer_email": None}})
+    out["events_backup_bodfix.organizer"] = r.modified_count
+    return out
+
+
+async def _handle_events_and_forum(db, user_id: str) -> Dict[str, Any]:
+    """Edge (a) events with other registrants -> keep, scrub organizer; else
+    delete. Edge (b) forum/blog posts -> keep as a placeholder so others' replies
+    survive. Returns notes for the job log."""
+    notes: Dict[str, Any] = {"events_scrubbed": 0, "events_deleted": 0, "discussions_placeheld": 0}
+    async for ev in db.events.find({"organizer_id": user_id}, {"_id": 0, "id": 1}):
+        eid = ev.get("id")
+        others = await db.event_registrations.count_documents(
+            {"event_id": eid, "user_id": {"$ne": user_id}})
+        if others:
+            await db.events.update_one({"id": eid}, {"$set": {
+                "organizer_name": FORMER, "organizer_email": None}})
+            notes["events_scrubbed"] += 1
+        else:
+            await db.events.delete_one({"id": eid})
+            await db.event_registrations.delete_many({"event_id": eid})
+            await db.crew_bank.delete_many({"event_id": eid})
+            notes["events_deleted"] += 1
+    r = await db.discussions.update_many(
+        {"author_id": user_id},
+        {"$set": {"author_name": FORMER, "body": "This post was removed.", "removed": True}})
+    notes["discussions_placeheld"] = r.modified_count
+    return notes
+
+
+async def _handle_business_ownership(db, user_id: str) -> List[str]:
+    """Edge (8): if an org/listing has other managers/admins, keep the shared
+    record and only remove this person; otherwise scrub it. Returns report lines."""
+    report: List[str] = []
+    async for bp in db.boat_pros.find({"user_id": user_id}, {"_id": 0, "id": 1}):
+        report.append(f"boat_pro listing {bp.get('id')} owned by deleted member - scrubbed (no shared managers model)")
+        await db.boat_pros.update_one({"id": bp.get("id")}, {"$set": {
+            "deleted": True, "hidden": True, "name": FORMER, "logo_url": None,
+            "logo_original_url": None, "cover_url": None, "photo_url": None, "photos": []}})
+    return report
+
+
+async def execute_purge(db, user_id: str, *, email_hint: Optional[str] = None) -> Dict[str, Any]:
+    """Idempotent, resumable account purge with a per-step log row. Safe to call
+    again after a failure - completed steps are skipped. Never half-deletes
+    silently: a failed step leaves status=failed and alerts admin@."""
+    import logging
+    logger = logging.getLogger("smn.account_delete")
+
+    user = await db.users.find_one({"user_id": user_id})
+    if not user:
+        return {"ok": False, "error": "no user"}
+    reason = await protected_reason(db, user)
+    if reason:
+        return {"ok": False, "refused": True, "reason": reason}
+
+    email = (user.get("email") or email_hint or "").strip().lower()
+    name = user.get("name") or "there"
+
+    job = await db.account_deletion_jobs.find_one({"user_id": user_id})
+    now = _nowiso()
+    if not job:
+        job = {"id": _uuid(), "user_id": user_id, "email_at_request": email,
+               "name_at_request": name, "status": "running", "steps": {},
+               "report": [], "created_at": now, "updated_at": now, "attempts": 0}
+        await db.account_deletion_jobs.insert_one(job)
+    steps = job.get("steps") or {}
+
+    async def mark(step: str, value="done", extra: Optional[Dict] = None):
+        steps[step] = value
+        upd = {"steps": steps, "updated_at": _nowiso()}
+        if extra:
+            upd.update(extra)
+        await db.account_deletion_jobs.update_one({"id": job["id"]}, {"$set": upd})
+
+    async def run_step(step: str, coro_fn):
+        if steps.get(step) == "done":
+            return
+        try:
+            res = await coro_fn()
+            await mark(step, "done", {f"result.{step}": res} if res is not None else None)
+        except Exception as e:  # noqa: BLE001
+            logger.exception("purge step %s failed for %s", step, user_id)
+            await mark(step, f"error: {e}")
+            await db.account_deletion_jobs.update_one({"id": job["id"]},
+                {"$set": {"status": "failed", "updated_at": _nowiso()}})
+            try:
+                from admin_notify import admin_notify
+                await admin_notify(db, kind="account_delete_failed",
+                    subject="Account deletion step failed",
+                    title="Account deletion needs attention",
+                    lines=[f"User {user_id} deletion step '{step}' failed: {e}",
+                           "The job is in a retry state and did not half-delete silently."],
+                    )
+            except Exception:
+                logger.exception("admin alert failed")
+            raise
+
+    async def _cancel_stripe():
+        import stripe  # noqa
+        sid = user.get("stripe_subscription_id")
+        provider = (user.get("subscription_provider") or "").lower()
+        if provider in ("apple", "google", "iap"):
+            return "store plan - instructed user to cancel in store"
+        if not sid:
+            return "no stripe subscription"
+        try:
+            stripe.Subscription.cancel(sid)
+            return "cancelled immediately"
+        except Exception as e:  # resource_missing etc must never fail deletion
+            return f"skipped ({e})"
+
+    async def _revoke_comp():
+        from billing import revoke_comp
+        await revoke_comp(user_id, reason="account_deleted")
+        await db.users.update_one({"user_id": user_id}, {"$unset": {"subscription_term_choice": ""}})
+        return "comp revoked, queued term cleared"
+
+    async def _stripe_customer_delete():
+        import stripe  # noqa
+        cust = user.get("stripe_customer_id")
+        if not cust:
+            return "no customer"
+        try:
+            stripe.Customer.delete(cust)
+            return "customer deleted"
+        except Exception as e:
+            return f"skipped ({e})"
+
+    async def _zoho():
+        from zoho_sync import enqueue
+        await db.users.update_one({"user_id": user_id}, {"$set": {"member_status": "deleted"}})
+        await enqueue(db, "account_deleted", user_id)
+        return "marked deleted + enqueued"
+
+    async def _storage():
+        paths = await collect_member_object_paths(db, user_id)
+        done = 0
+        for p in paths:
+            try:
+                overwrite_object_empty(p)
+                done += 1
+            except Exception:
+                logger.exception("overwrite failed for %s", p)
+        return f"overwrote {done}/{len(paths)} objects"
+
+    async def _edges():
+        ev = await _handle_events_and_forum(db, user_id)
+        biz = await _handle_business_ownership(db, user_id)
+        return {"events_forum": ev, "business": biz}
+
+    async def _delete_rows():
+        counts = {}
+        for coll, action, filt_fn in COLLECTION_PLAN:
+            if action != "delete":
+                continue
+            flt = filt_fn(user_id, email)
+            if flt is None:
+                continue
+            r = await db[coll].delete_many(flt)
+            if r.deleted_count:
+                counts[coll] = r.deleted_count
+        return counts
+
+    async def _scrub_and_tombstone():
+        scrubs = await _scrub_denormalized_names(db, user_id)
+        # Clear image references on the member's own kept rows (already deleted
+        # for posts/discussions; boat_pros handled in edges). Tombstone the user.
+        await db.users.update_one({"user_id": user_id}, {"$set": {
+            "name": FORMER, "member_status": "deleted", "deleted": True,
+            "deleted_at": _nowiso(), "picture": None, "avatar": None, "bio": None,
+            "phone": None, "public_phone": None, "primary_market": None,
+            "first_name": None, "last_name": None, "company_name": None,
+            "org_name": None, "website": None,
+            "stripe_customer_id": None, "stripe_subscription_id": None,
+            "subscription_tier": "free", "subscription_provider": None,
+            "subscription_status": "deleted", "subscription_package_id": None,
+            "subscription_expires": None, "is_promo": False,
+        }, "$unset": {"email": "", "handle": "", "password_hash": "",
+                      "picture_original": "", "comp_grant_id": ""}})
+        return scrubs
+
+    async def _finalize_email():
+        from mailer import send_email, account_deleted_email_html
+        if email:
+            await send_email(recipient_email=email, subject="Your account has been deleted",
+                             html_content=account_deleted_email_html(name=name))
+            return f"final email sent to {email}"
+        return "no email on file"
+
+    try:
+        await run_step("cancel_stripe", _cancel_stripe)
+        await run_step("revoke_comp", _revoke_comp)
+        await run_step("stripe_customer_delete", _stripe_customer_delete)
+        await run_step("zoho_mark_deleted", _zoho)
+        await run_step("overwrite_storage", _storage)
+        await run_step("edges_events_forum_business", _edges)
+        await run_step("delete_rows", _delete_rows)
+        await run_step("scrub_and_tombstone", _scrub_and_tombstone)
+        await run_step("final_email", _finalize_email)
+    except Exception:
+        return {"ok": False, "job_id": job["id"], "status": "failed"}
+
+    await db.account_deletion_jobs.update_one({"id": job["id"]},
+        {"$set": {"status": "done", "completed_at": _nowiso(), "updated_at": _nowiso()}})
+    # kill any sessions created after the ack, belt and braces
+    await db.user_sessions.delete_many({"user_id": user_id})
+    return {"ok": True, "job_id": job["id"], "status": "done"}
+
+
+async def resume_pending_jobs(db) -> int:
+    """On startup, resume any purge that was running/failed (idempotent)."""
+    n = 0
+    async for job in db.account_deletion_jobs.find({"status": {"$in": ["running", "failed"]}},
+                                                   {"_id": 0, "user_id": 1}):
+        try:
+            await execute_purge(db, job["user_id"])
+            n += 1
+        except Exception:
+            pass
+    return n
+
+
+def _uuid() -> str:
+    import uuid as _u
+    return _u.uuid4().hex
+
+
+def _nowiso() -> str:
+    from datetime import datetime, timezone
+    return datetime.now(timezone.utc).isoformat()
+
+
 def render_table(report: Dict[str, Any]) -> str:
     if not report.get("ok"):
         return report.get("message") or report.get("error") or "n/a"

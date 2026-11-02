@@ -1,0 +1,1 @@
+{"indexes":[{"v":{"$numberInt":"2"},"key":{"_id":{"$numberInt":"1"}},"name":"_id_"}],"uuid":"72e071c5ac364c51b9e5a68031ed4918","collectionName":"events_backup_bodfix","type":"collection"}

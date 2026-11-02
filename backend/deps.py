@@ -197,6 +197,9 @@ async def current_user_from_token(
     # by an admin clearing the flag).
     if user and user.get("banned"):
         return None
+    # Deleted (tombstoned) accounts are logged-out everywhere and cannot sign in.
+    if user and (user.get("deleted") or user.get("member_status") == "deleted"):
+        return None
     # Lazy promote/lapse: if a paid subscription has lapsed, either promote a
     # queued plan (RULE 1) or revert to free, on access. Not reached for banned
     # users (returned as logged-out above), so a banned user's queue is held.

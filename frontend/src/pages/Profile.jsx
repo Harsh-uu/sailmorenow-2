@@ -10,6 +10,7 @@ import Modal from "@/components/Modal";
 import PushPreferencesPanel from "@/components/PushPreferencesPanel";
 import SavedSection from "@/components/SavedSection";
 import DeleteListingButton from "@/components/DeleteListingButton";
+import DeleteAccountSection from "@/components/DeleteAccountSection";
 import { SAILING_ICONS } from "@/components/ProfilePhotoEditor";
 import { api, TERMS_URL, PRIVACY_URL } from "@/lib/api";
 import { toast } from "sonner";
@@ -629,6 +630,8 @@ export default function Profile() {
           <Link to="/community-guidelines" data-testid="legal-coc-link" className="text-sm font-semibold text-[#55B3AD] hover:underline">Code of Conduct</Link>
         </div>
       </section>
+
+      <DeleteAccountSection />
 
       <Modal open={iconOpen} onClose={() => setIconOpen(false)} title="Pick an avatar" testId="avatar-icon-modal">
         <div className="p-5 flex flex-wrap gap-2 justify-center">
