@@ -8,7 +8,7 @@ from typing import Optional, Dict, Any, List
 
 from fastapi import APIRouter, Cookie, Header, HTTPException, Depends, Query, Request
 
-from deps import db, current_user_from_token, is_admin, is_paid_subscriber, partner_badge, require_interaction, require_admin, rate_limit, resolve_handle_user, display_image, business_listing_for, resolve_author_identity, author_fields, purge_content
+from deps import db, current_user_from_token, is_admin, is_paid_subscriber, partner_badge, require_interaction, require_participation, require_admin, rate_limit, resolve_handle_user, display_image, business_listing_for, resolve_author_identity, author_fields, purge_content
 from schemas import (PostCreate, PostExtend, EventCreate, RegistrationCreate,
                      CrewBankJoin, CrewStatusUpdate, StandaloneCrewUpsert,
                      CommentCreate, EventRecipientsUpdate, EventUpdate)
@@ -168,7 +168,8 @@ async def create_post(body: PostCreate,
                     "message": "Free organizations get 1 feed post a month. Become a Community Partner for unlimited posts.",
                 })
         else:
-            require_interaction(u)
+            # Free Sailors, Boat Owners and Boat Pros may post; free orgs handled above.
+            require_participation(u)
     if body.market not in PNW_MARKETS:
         raise HTTPException(status_code=400, detail="Invalid market")
     now = datetime.now(timezone.utc)
@@ -1746,7 +1747,7 @@ async def create_comment(post_id: str, body: CommentCreate,
     u = await current_user_from_token(session_token, authorization)
     if not u:
         raise HTTPException(status_code=401, detail="Not authenticated")
-    require_interaction(u)
+    require_participation(u)
     text = (body.body or "").strip()
     if not text:
         raise HTTPException(status_code=400, detail="Comment cannot be empty")

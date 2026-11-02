@@ -38,7 +38,7 @@ FAQ_SEED: List[Dict[str, Any]] = [
      "answer": "Open your Profile and go to \u201cMarkets you follow\u201d to add or remove markets. Events, your feed and your home screen update right away."},
     # PLANS AND PRICING
     {"category": "Plans and Pricing", "question": "What does a free account include?",
-     "answer": "Free accounts can browse, like posts, blogs and forum posts, and change their profile picture. Messaging and following need a paid plan."},
+     "answer": "Free accounts can read everything, post in the feed and hub, comment and react. Direct messaging, writing reviews, a Crew Bank listing and ID verification need a paid plan."},
     {"category": "Plans and Pricing", "question": "What do boat pro plans cost and include?",
      "answer": "Basic is $12.99 a month: one market, no logo. Featured is $19.99 a month: two markets, your logo and an enhanced listing. Premium is $29.99 a month: unlimited markets, a 5-photo gallery, trust and credentials, top directory placement. Every paid Boat Pro plan can receive reviews and send direct messages."},
     {"category": "Plans and Pricing", "question": "Is there a discount for longer plans?",

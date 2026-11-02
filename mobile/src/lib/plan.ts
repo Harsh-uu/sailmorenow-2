@@ -24,6 +24,19 @@ export function isFreeIndividual(
   return !canInteract(user) && (user.account_type || "") !== "partner";
 }
 
+// "May this account post, comment and react?" Any paid tier qualifies, and so do
+// free Sailors, Boat Owners and Boat Pros (a free Boat Pro cannot hold a public
+// listing). Free organizations are NOT included (they keep the server's org
+// limits and stay blocked from comments/reactions/hub). Mirrors the backend
+// deps.can_participate().
+export function canParticipate(
+  user?: { subscription_tier?: string | null; account_type?: string | null } | null,
+): boolean {
+  if (!user) return false;
+  if (canInteract(user)) return true;
+  return ["sailor", "boat_owner", "boat_pro"].includes((user.account_type || "").toLowerCase());
+}
+
 // "Can this account post events?" Alpha rule: only clubs/orgs (partner, incl.
 // free partner orgs), Boat Pros and admins. Sailors and boat owners (paid or
 // free) cannot yet. Mirrors the server gate on POST /events.

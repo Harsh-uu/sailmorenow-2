@@ -11,7 +11,7 @@ import { Avatar, Badge, ErrorState, Loading } from "@/src/components/ui";
 import { Reactions } from "@/src/components/Reactions";
 import { api, ApiError } from "@/src/lib/api";
 import { handleUpgrade, promptCommentUpgrade } from "@/src/lib/upgrade";
-import { canInteract } from "@/src/lib/plan";
+import { canParticipate } from "@/src/lib/plan";
 import { useToast } from "@/src/context/ToastContext";
 import { shareLink } from "@/src/lib/share";
 import { useAuth } from "@/src/context/AuthContext";
@@ -60,7 +60,7 @@ export default function HubDetail() {
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
   const inputRef = useRef<TextInput>(null);
-  const isFree = !canInteract(user);
+  const isFree = !canParticipate(user);
 
   const onFocusComment = () => {
     if (!isFree) return;

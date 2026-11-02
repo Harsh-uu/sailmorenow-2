@@ -47,6 +47,15 @@ BANNED = [
     "yearly feature in newsletter",
     "photo instead of avatar",
     "priority placement premium only",
+    # FREE-TIER-BUILD-1: posting, commenting and reacting are now free for
+    # individuals (Sailors, Boat Owners, Boat Pros). These claim they are Premium.
+    "upgrade to post",
+    "posting & reactions",
+    "posting &amp; reactions",
+    # Old free-org feed wording (now: 1 post / month, a marketplace listing counts).
+    "1 update each calendar month",
+    # Wrong Boat Pro entry price (Basic is $12.99, not $19.99).
+    "boat pros from $19.99",
 ]
 
 PRICE_RE = re.compile(r"\$(\d{1,3}(?:,\d{3})*\.\d{2})\b")

@@ -1054,8 +1054,8 @@ def winback_email_html(*, name: str, app_url: str) -> str:
         <tr><td style="padding:24px 28px;">
           <p style="margin:0 0 14px 0; font-size:15px; line-height:1.6;">Hi {name or 'there'},</p>
           <p style="margin:0 0 16px 0; font-size:15px; line-height:1.6;">
-            Your Premium features are paused - direct messaging, posting &amp; reactions, reviews, and your
-            Crew Bank listing are switched off for now. Pick up right where you left off any time.
+            Your Premium features are paused - direct messaging, writing reviews, your Crew Bank listing
+            and the ID-verified badge are switched off for now. Pick up right where you left off any time.
           </p>
           <div style="text-align:center; margin:22px 0 6px 0;">
             <a href="{app_url}/pricing" style="display:inline-block; background:#F2A03B; color:#ffffff; text-decoration:none; font-weight:700; padding:13px 28px; border-radius:999px; font-size:14px;">Resubscribe in a tap</a>

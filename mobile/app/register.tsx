@@ -267,7 +267,7 @@ export default function Register() {
                   style={[styles.planRow, { borderColor: plan === "premium" ? colors.accent : colors.border, backgroundColor: plan === "premium" ? colors.accentSoft : colors.surface }]}>
                   <View style={{ flex: 1 }}>
                     <Text style={{ color: colors.onSurface, fontWeight: "700", fontSize: 14 }}>Premium</Text>
-                    <Text style={{ color: colors.muted, fontSize: 11.5 }}>Direct messaging, Posting & reactions, Writing reviews, Crew Bank listing, ID-verified badge</Text>
+                    <Text style={{ color: colors.muted, fontSize: 11.5 }}>Direct messaging, Writing reviews, Crew Bank listing, ID-verified badge</Text>
                   </View>
                   <Text style={{ color: colors.onSurface, fontWeight: "800", fontSize: 14 }}>${SAILOR_MONTHLY.toFixed(2)}<Text style={{ color: colors.muted, fontSize: 11, fontWeight: "500" }}>/mo</Text></Text>
                 </Pressable>

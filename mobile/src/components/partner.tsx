@@ -78,7 +78,7 @@ export function UpgradeNudge() {
       <View style={{ flex: 1 }}>
         <Text style={[styles.title, { color: colors.onSurface }]}>Get the most out of Sail More Now</Text>
         <Text style={[styles.body, { color: colors.onSurfaceSecondary }]}>
-          $6.99/mo unlocks messaging, posting & reactions, reviews, and your Crew Bank listing.
+          $6.99/mo unlocks messaging, reviews, your Crew Bank listing and the ID-verified badge.
         </Text>
       </View>
       <Pressable testID="upgrade-nudge-dismiss" onPress={dismiss} hitSlop={10} style={{ padding: 2 }}>

@@ -9,7 +9,7 @@ import { fmtTimeAgo } from "@/src/lib/format";
 import { LinkifiedText } from "@/src/lib/linkify";
 import { useToast } from "@/src/context/ToastContext";
 import { handleUpgrade, promptCommentUpgrade } from "@/src/lib/upgrade";
-import { canInteract } from "@/src/lib/plan";
+import { canParticipate } from "@/src/lib/plan";
 import { useProfilePreview } from "@/src/context/ProfilePreviewContext";
 import { CommentDeleteButton } from "@/src/components/CommentDeleteButton";
 
@@ -34,7 +34,7 @@ export function InlineComments({ targetId, allowComments = true, onCount, onComp
   const [busy, setBusy] = useState(false);
   const [replyTo, setReplyTo] = useState<Comment | null>(null);
   const inputRef = useRef<TextInput>(null);
-  const isFree = !canInteract(user);
+  const isFree = !canParticipate(user);
 
   // Free accounts: block the comment box on focus (prompt + Pricing), blur and
   // clear any draft so no unsent text is left when they come back.

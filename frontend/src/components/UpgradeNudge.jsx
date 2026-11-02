@@ -36,7 +36,7 @@ export default function UpgradeNudge() {
         <div className="min-w-0">
           <div className="font-display font-bold smn-heading">Get the most out of Sail More Now</div>
           <p className="text-sm text-slate-600 dark:text-slate-300 mt-1">
-            For <b>$6.99/mo</b>, unlock direct messaging, posting &amp; reactions, leaving reviews, and listing yourself in the Crew Bank.
+            For <b>$6.99/mo</b>, unlock direct messaging, leaving reviews, listing yourself in the Crew Bank, and the ID-verified badge.
           </p>
           <Link to="/my-plan" data-testid="upgrade-nudge-cta" className="mt-3 inline-flex items-center gap-1.5 text-sm font-semibold text-[#d98c30] hover:text-[#b5741f]">
             See what's included <Icon name="arrow-right" tone="current" className="h-4 w-4" />

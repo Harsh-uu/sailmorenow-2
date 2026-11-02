@@ -358,7 +358,7 @@ def can_review(user_like: Optional[Dict[str, Any]]) -> bool:
 # an upgrade prompt instead of a generic error. Returned as HTTP 403.
 UPGRADE_REQUIRED = {
     "code": "upgrade_required",
-    "message": "This is a Premium feature. Upgrade your account to message, post, react, review and list yourself.",
+    "message": "This is a Premium feature. Upgrade your account to message, write reviews, list yourself in the Crew Bank and verify your ID.",
 }
 
 
@@ -423,6 +423,35 @@ def require_interaction(user: Optional[Dict[str, Any]]) -> None:
     (long-unverified) account is blocked first with a verify-email message."""
     require_not_locked(user)
     if not is_paid_subscriber(user):
+        raise HTTPException(status_code=403, detail=UPGRADE_REQUIRED)
+
+
+# Account types (individuals) that may POST, COMMENT and REACT for free. A free
+# Boat Pro cannot hold a public directory listing, so "free Boat Pro" always
+# means "no listing". Organizations are NOT included: free orgs keep their own
+# per-month post limit and stay blocked from comments/reactions/hub.
+PARTICIPATION_ACCOUNT_TYPES = frozenset({"sailor", "boat_owner", "boat_pro"})
+
+
+def can_participate(user_like: Optional[Dict[str, Any]]) -> bool:
+    """Whether an account may post, comment and react. Any paid tier qualifies;
+    free Sailors, Boat Owners and Boat Pros also qualify. Free organizations and
+    anonymous users do not."""
+    if not user_like:
+        return False
+    if can_interact(user_like):
+        return True
+    return (user_like.get("account_type") or "").lower() in PARTICIPATION_ACCOUNT_TYPES
+
+
+def require_participation(user: Optional[Dict[str, Any]]) -> None:
+    """Gate feed posts, comments, reactions and hub authoring. Free Sailors, Boat
+    Owners and Boat Pros are allowed; free organizations and anonymous users are
+    not. The 24-hour unverified-email lock still applies first (same as
+    require_interaction), so a long-unverified account is blocked until it
+    confirms its email."""
+    require_not_locked(user)
+    if not can_participate(user):
         raise HTTPException(status_code=403, detail=UPGRADE_REQUIRED)
 
 

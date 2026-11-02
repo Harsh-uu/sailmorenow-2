@@ -10,7 +10,7 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Cookie, Header, HTTPException
 from pydantic import BaseModel
 
-from deps import db, current_user_from_token, require_interaction
+from deps import db, current_user_from_token, require_interaction, require_participation
 
 router = APIRouter()
 
@@ -89,7 +89,7 @@ async def set_reaction(body: ReactionBody,
     u = await current_user_from_token(session_token, authorization)
     if not u:
         raise HTTPException(status_code=401, detail="Not authenticated")
-    require_interaction(u)
+    require_participation(u)
     if body.target_type not in VALID_TARGETS or body.value not in {1, -1, 0}:
         raise HTTPException(status_code=400, detail="Invalid reaction")
     key = {"target_type": body.target_type, "target_id": body.target_id, "user_id": u["user_id"]}

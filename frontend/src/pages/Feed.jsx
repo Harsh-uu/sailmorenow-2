@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef } from "react";
 import { Icon } from "@/components/Icon";
 import { api } from "@/lib/api";
-import { canInteract, isFreeIndividual, promptUpgrade } from "@/lib/plan";
+import { canInteract } from "@/lib/plan";
 import { useAuth } from "@/context/AuthContext";
 import { useMarket } from "@/context/MarketContext";
 import { toast } from "sonner";
@@ -116,7 +116,6 @@ export default function Feed({ lockType = null }) {
     if (composeHandled.current || !user) return;
     if (sp.get("compose") === "1" && !lockType) {
       composeHandled.current = true;
-      if (isFreeIndividual(user)) { promptUpgrade("Upgrade to post to the community feed"); return; }
       setDraft((d) => ({ ...d, type: qType || "sailing_opportunity", identity: user.active_identity || "personal" }));
       setCreating(true);
     }
@@ -255,7 +254,7 @@ export default function Feed({ lockType = null }) {
         </div>
         {user && (
           <button
-            onClick={() => { if (isFreeIndividual(user)) { promptUpgrade("Upgrade to post to the community feed"); return; } if (!creating) setDraft((d) => ({ ...d, identity: user.active_identity || "personal" })); setCreating(!creating); }}
+            onClick={() => { if (!creating) setDraft((d) => ({ ...d, identity: user.active_identity || "personal" })); setCreating(!creating); }}
             data-testid="new-post-btn"
             className="inline-flex items-center gap-2 bg-[#F2A03B] hover:bg-[#d98c30] text-white rounded-full px-5 py-2.5 font-semibold"
           >
@@ -409,7 +408,7 @@ export default function Feed({ lockType = null }) {
             <button onClick={() => { setCreating(false); setEditingId(null); }} className="text-slate-600 px-4 py-2 rounded-full hover:bg-slate-100">Cancel</button>
             <button onClick={submit} data-testid="submit-post" className="bg-[#1F3F5B] hover:bg-[#152a3d] text-white rounded-full px-5 py-2 font-semibold">{editingId ? "Save changes" : "Post"}</button>
           </div>
-          {!editingId && !canInteract(user) && <p className="mt-3 text-xs text-slate-500">Free tier: 1 post per month. <a className="text-[#F2A03B] font-semibold" href="/pricing">Upgrade</a> for unlimited posts.</p>}
+          {!editingId && !canInteract(user) && user.account_type === "partner" && <p className="mt-3 text-xs text-slate-500">Free organizations: 1 post per month, and a marketplace listing counts as that post. <a className="text-[#F2A03B] font-semibold" href="/pricing">Become a Community Partner</a> for unlimited posts.</p>}
         </div>
       )}
 

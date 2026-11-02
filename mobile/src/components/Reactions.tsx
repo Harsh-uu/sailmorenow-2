@@ -5,7 +5,7 @@ import { api, ApiError } from "@/src/lib/api";
 import { useTheme } from "@/src/theme";
 import { useToast } from "@/src/context/ToastContext";
 import { useAuth } from "@/src/context/AuthContext";
-import { canInteract } from "@/src/lib/plan";
+import { canParticipate } from "@/src/lib/plan";
 
 // Up/down reactions with visible counts. Works for post | discussion | comment.
 export function Reactions({ targetType, targetId }: { targetType: string; targetId: string }) {
@@ -25,7 +25,7 @@ export function Reactions({ targetType, targetId }: { targetType: string; target
     if (busy) return;
     // Free accounts can browse but not react. Nudge with a toast and stay put
     // (no redirect). If we're unsure, we still call and treat a 403 the same way.
-    if (!canInteract(user)) { toast.warning("Upgrade to react to posts"); return; }
+    if (!canParticipate(user)) { toast.warning("Upgrade to react to posts"); return; }
     setBusy(true);
     try {
       const d = await api.post(`/reactions`, { target_type: targetType, target_id: targetId, value });

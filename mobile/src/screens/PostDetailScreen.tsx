@@ -18,7 +18,7 @@ import { LinkifiedText } from "@/src/lib/linkify";
 import { Icon } from "@/src/components/Icon";
 import { useSaved } from "@/src/lib/useSaved";
 import { useAuth } from "@/src/context/AuthContext";
-import { canInteract } from "@/src/lib/plan";
+import { canParticipate } from "@/src/lib/plan";
 import { AdminControls } from "@/src/components/AdminControls";
 import { CommentDeleteButton } from "@/src/components/CommentDeleteButton";
 import { MARKETPLACE_CHANGED, CONTENT_CHANGED } from "@/src/lib/events";
@@ -74,7 +74,7 @@ export default function PostDetail() {
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
   const inputRef = useRef<TextInput>(null);
-  const isFree = !canInteract(user);
+  const isFree = !canParticipate(user);
 
   const onFocusComment = () => {
     if (!isFree) return;

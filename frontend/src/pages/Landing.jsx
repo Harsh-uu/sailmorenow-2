@@ -22,6 +22,7 @@ const ROLE_PATHS = [
     tagline: "Get more time on the water and plug into the community.",
     free: [
       "Browse Crew and Volunteer opportunities",
+      "Post, comment and react in the feed and hub",
       "See what other sailors are talking about",
       "Access directory of local Clubs & Boat Pros",
       "Get involved in your local sailing scene",
@@ -30,7 +31,6 @@ const ROLE_PATHS = [
     premium: [
       "Get listed in the Crew Bank",
       "Direct messaging with owners, sailors & pros",
-      "Interact - post & respond on forums and feeds",
       "Leave & receive reviews",
       "Enhanced profile with an ID-verified badge",
     ],
@@ -40,15 +40,14 @@ const ROLE_PATHS = [
     tagline: "Find crew, hire trusted pros, and plan your whole season.",
     free: [
       "Browse Crew Banks - seasonal and per event",
+      "Post crew opportunities, comment and react",
       "Browse directory of local Boat Pros & Clubs",
       "See what's happening in your local community",
       "Live Events calendar",
     ],
     premiumTitle: "Why go Premium", premiumNote: UPGRADE_NOTE,
     premium: [
-      "Post crew opportunities",
       "Direct Messaging with potential crew, clubs & pros",
-      "Interact - post & respond on marketplace and hub",
       "Leave & receive reviews",
       "Enhanced profile with an ID-verified badge",
     ],
@@ -76,7 +75,7 @@ const ROLE_PATHS = [
     free: [
       "Get listed in Clubs & Orgs Directory",
       "Build following of potential members",
-      "Post 1 volunteer event and 1 update each calendar month",
+      "Post 1 volunteer event and 1 update (including a marketplace listing) each calendar month",
       "RSVPs & attendee notifications",
       "Get reviews and build reputation",
     ],

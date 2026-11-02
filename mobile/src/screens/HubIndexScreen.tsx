@@ -9,7 +9,7 @@ import { api } from "@/src/lib/api";
 import { useTheme } from "@/src/theme";
 import { useAuth } from "@/src/context/AuthContext";
 import { useToast } from "@/src/context/ToastContext";
-import { isFreeIndividual } from "@/src/lib/plan";
+import { canParticipate } from "@/src/lib/plan";
 import { promptCommentUpgrade } from "@/src/lib/upgrade";
 import { fmtTimeAgo } from "@/src/lib/format";
 
@@ -123,7 +123,7 @@ export default function Hub() {
 
       <Pressable
         testID="hub-compose-fab"
-        onPress={() => { if (isFreeIndividual(user)) { promptCommentUpgrade(toast, "Upgrade to start topics and write blog posts"); return; } router.push({ pathname: "/hub/new", params: { kind } }); }}
+        onPress={() => { if (!canParticipate(user)) { promptCommentUpgrade(toast, "Starting topics and writing blog posts is a Community Partner feature"); return; } router.push({ pathname: "/hub/new", params: { kind } }); }}
         style={[styles.fab, { backgroundColor: colors.accent }]}
       >
         <Icon name="create-outline" size={26} color={colors.onAccent}  footprint={26}/>

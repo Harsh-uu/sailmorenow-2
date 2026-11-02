@@ -15,7 +15,7 @@ from typing import Optional, Dict, Any, List
 from fastapi import APIRouter, Cookie, Header, HTTPException, Request
 from pydantic import BaseModel
 
-from deps import db, current_user_from_token, is_admin, business_listing_for, resolve_author_identity, author_fields, is_paid_subscriber, require_interaction, purge_content, org_status
+from deps import db, current_user_from_token, is_admin, business_listing_for, resolve_author_identity, author_fields, is_paid_subscriber, require_interaction, require_participation, purge_content, org_status
 from constants import PNW_MARKETS, MAX_PHOTO_URL_CHARS
 from notifications import notify
 import push as push_mod
@@ -374,18 +374,19 @@ async def create_discussion(body: DiscussionCreate,
         raise HTTPException(status_code=400, detail=f"Invalid market: {body.market}")
     if len(body.image_url or "") > MAX_PHOTO_URL_CHARS:
         raise HTTPException(status_code=400, detail="Photo too large")
-    # Free individuals cannot create forum topics or blog posts (same gate as
-    # feed posts). Organizations: only Community Partner / Founding Partner can
-    # post forums or blogs; free organizations are blocked. Paid members and
-    # Boat Pros (paid tier) are unaffected.
+    # Free individuals (Sailors, Boat Owners, Boat Pros) can create forum topics
+    # and blog posts (same as feed posts); blog posts still require admin
+    # approval. Organizations: only Community Partner / Founding Partner can post
+    # forums or blogs; free organizations are blocked. Paid members and Boat Pros
+    # are unaffected.
     if u.get("account_type") == "partner":
         if org_status(u) == "free":
             raise HTTPException(status_code=403, detail={
                 "code": "upgrade_required",
                 "message": "Free organizations cannot post forums or blogs. Community Partner organizations can.",
             })
-    elif not is_paid_subscriber(u):
-        require_interaction(u)
+    else:
+        require_participation(u)
     now = datetime.now(timezone.utc)
     # Forum topics publish immediately; blog posts require admin approval.
     status = "published" if body.kind == "forum" else "pending"

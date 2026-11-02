@@ -3,7 +3,7 @@ import { Icon } from "@/components/Icon";
 import { Link } from "react-router-dom";
 import { api } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
-import { isFreeIndividual, promptUpgrade } from "@/lib/plan";
+import { canParticipate, promptUpgrade } from "@/lib/plan";
 import { useMarket } from "@/context/MarketContext";
 import { toast } from "sonner";
 import Modal from "@/components/Modal";
@@ -143,7 +143,7 @@ export default function CommunityHub({ embedded = false, lockKind = null }) {
         </div>
         ) : <div />}
         {user && (
-          <button onClick={() => { if (isFreeIndividual(user)) { promptUpgrade(kind === "blog" ? "Upgrade to write blog posts" : "Upgrade to start forum topics"); return; } setDraft((d) => ({ ...d, identity: user.active_identity || "personal", market: user.primary_market || null })); setShowCreate(true); }} data-testid="hub-new-btn"
+          <button onClick={() => { if (!canParticipate(user)) { promptUpgrade(kind === "blog" ? "Writing blog posts is a Community Partner feature" : "Starting forum topics is a Community Partner feature"); return; } setDraft((d) => ({ ...d, identity: user.active_identity || "personal", market: user.primary_market || null })); setShowCreate(true); }} data-testid="hub-new-btn"
                   className="inline-flex items-center gap-2 bg-[#F2A03B] hover:bg-[#d98c30] text-white rounded-full px-5 py-2 font-semibold">
             <Icon name="add" tone="current" className="h-4 w-4" /> {kind === "blog" ? "Submit a draft" : "Start a topic"}
           </button>

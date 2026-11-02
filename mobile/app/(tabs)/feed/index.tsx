@@ -23,8 +23,7 @@ import { useProfilePreview } from "@/src/context/ProfilePreviewContext";
 import { LinkifiedText } from "@/src/lib/linkify";
 import { useSaved } from "@/src/lib/useSaved";
 import { useToast } from "@/src/context/ToastContext";
-import { canInteract, isFreeIndividual, canPostEvents } from "@/src/lib/plan";
-import { promptCommentUpgrade } from "@/src/lib/upgrade";
+import { canParticipate, canPostEvents } from "@/src/lib/plan";
 import { MP_FILTERS_EVT } from "@/app/marketplace-filters";
 import { CONTENT_CHANGED } from "@/src/lib/events";
 
@@ -217,7 +216,7 @@ export default function Hub() {
   // thumbs sit in their own Pressable so the tap never reaches the parent).
   // Free accounts get a toast and stay put; a 403 is treated the same way.
   const reactTo = async (targetType: "post" | "discussion", targetId: string, value: number) => {
-    if (!canInteract(user)) { toast.warning("Upgrade to react to posts"); return; }
+    if (!canParticipate(user)) { toast.warning("Upgrade to react to posts"); return; }
     try {
       const d = await api.post<{ up: number; down: number; mine: number }>("/reactions", { target_type: targetType, target_id: targetId, value });
       setRx((cur) => ({ ...cur, [`${targetType}:${targetId}`]: d }));
@@ -237,7 +236,6 @@ export default function Hub() {
   // Shared entry to the create screen with For sale preselected. Free accounts
   // get the standard upgrade prompt (same proactive gate the compose sheet uses).
   const addListing = () => {
-    if (isFreeIndividual(user)) { promptCommentUpgrade(toast, "Upgrade to list items in the Marketplace"); return; }
     router.push("/new-post?type=for_sale" as any);
   };
   const [composeOpen, setComposeOpen] = useState(false);
@@ -396,7 +394,7 @@ export default function Hub() {
               { label: "New blog post", icon: "newspaper-outline", go: "/hub/new?kind=blog" },
               ...(canPostEvents(user) ? [{ label: "New event", icon: "calendar-outline", go: "/new-event" }] : []),
             ].map((o) => (
-              <Pressable key={o.label} testID={`compose-${o.go}`} onPress={() => { setComposeOpen(false); if (isFreeIndividual(user)) { promptCommentUpgrade(toast, "Upgrade to post, start topics and create events"); return; } router.push(o.go as any); }} style={styles.sheetRow}>
+              <Pressable key={o.label} testID={`compose-${o.go}`} onPress={() => { setComposeOpen(false); router.push(o.go as any); }} style={styles.sheetRow}>
                 <Icon name={o.icon as any} size={20} color={colors.teal}  footprint={20}/>
                 <Text style={{ color: colors.onSurface, fontSize: 16, marginLeft: 12, flex: 1, flexShrink: 1 }}>{o.label}</Text>
               </Pressable>
