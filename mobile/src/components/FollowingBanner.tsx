@@ -17,8 +17,8 @@ export function FollowingBanner() {
         <Icon name="org" size={18} color={colors.teal} footprint={18} />
       </View>
       <View style={{ flex: 1 }}>
-        <Text style={{ color: colors.onBrandTertiary, fontWeight: "800", fontSize: 14.5 }}>Following</Text>
-        <Text style={{ color: colors.onBrandTertiary, opacity: 0.85, fontSize: 12.5 }} numberOfLines={1}>
+        <Text maxFontSizeMultiplier={1.3} style={{ color: colors.onBrandTertiary, fontWeight: "800", fontSize: 14.5 }}>Following</Text>
+        <Text style={{ color: colors.onBrandTertiary, opacity: 0.85, fontSize: 12.5 }} numberOfLines={2} maxFontSizeMultiplier={1.2}>
           Latest from clubs &amp; orgs you follow
         </Text>
       </View>

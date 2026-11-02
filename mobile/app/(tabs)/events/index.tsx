@@ -171,10 +171,11 @@ export default function Events() {
         <View style={[styles.calCard, { backgroundColor: colors.surface, borderColor: colors.border }]} testID="events-calendar">
           <View style={styles.calTopRow}>
             <SegmentedControl testID="cal-view" value={calView} onChange={(v) => setCalView(v as "week" | "month")}
+              style={{ flexShrink: 1 }}
               options={[{ value: "week", label: "Week" }, { value: "month", label: "Month" }]} />
             <Pressable testID="cal-today-btn" onPress={goToday} style={[styles.todayBtn, { borderColor: colors.teal }]}>
               <Icon name="today-outline" size={14} color={colors.teal}  footprint={14}/>
-              <Text style={{ color: colors.teal, fontWeight: "700", fontSize: 12.5 }}>Today</Text>
+              <Text numberOfLines={1} maxFontSizeMultiplier={1.2} style={{ color: colors.teal, fontWeight: "700", fontSize: 12.5 }}>Today</Text>
             </Pressable>
           </View>
           <View style={styles.calNav}>
@@ -208,7 +209,7 @@ export default function Events() {
             {CAT_ORDER.map((c) => (
               <View key={c} style={styles.legendItem}>
                 <View style={[styles.legendDot, { backgroundColor: CAT_COLORS[c] }]} />
-                <Text style={[styles.legendLbl, { color: colors.muted }]}>{c[0].toUpperCase() + c.slice(1)}</Text>
+                <Text numberOfLines={1} maxFontSizeMultiplier={1.2} style={[styles.legendLbl, { color: colors.muted }]}>{c[0].toUpperCase() + c.slice(1)}</Text>
               </View>
             ))}
           </View>
@@ -357,8 +358,8 @@ const styles = StyleSheet.create({
   calDotRow: { flexDirection: "row", gap: 2, marginTop: 3, height: 6, alignItems: "center" },
   calDot: { width: 5, height: 5, borderRadius: 3 },
   calViewToggle: { flexDirection: "row", gap: 6 },
-  calTopRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 8 },
-  todayBtn: { flexDirection: "row", alignItems: "center", gap: 4, paddingHorizontal: 12, paddingVertical: 5, borderRadius: 999, borderWidth: 1 },
+  calTopRow: { flexDirection: "row", alignItems: "center", marginBottom: 8, flexWrap: "wrap", rowGap: 8 },
+  todayBtn: { flexDirection: "row", alignItems: "center", gap: 4, paddingHorizontal: 12, paddingVertical: 5, borderRadius: 999, borderWidth: 1, flexShrink: 0, marginLeft: "auto" },
   calViewBtn: { paddingHorizontal: 16, paddingVertical: 5, borderRadius: 999, borderWidth: 1 },
   legend: { flexDirection: "row", flexWrap: "wrap", gap: 12, marginTop: 10, justifyContent: "center" },
   legendItem: { flexDirection: "row", alignItems: "center", gap: 4 },
