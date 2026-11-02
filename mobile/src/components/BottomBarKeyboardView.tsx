@@ -137,28 +137,29 @@ function KbDebugStrip({ dbg, inTab, insetBottom }: { dbg: Dbg; inTab: boolean; i
   );
 }
 
-// TEMP on-device probe for the 1.5x content-text cap (remove with KB_DEBUG at
+// TEMP on-device probe for the 2x content-text cap (remove with KB_DEBUG at
 // launch). Measures the rendered height of an UNCAPPED Text against a reference
 // Text pinned at 1.0x; their ratio is the effective multiplier the OS applied.
-// With the cap working, that ratio never exceeds ~1.5 even when the iOS font
-// scale is higher. Shows e.g. "fs=3.1 probe=1.50 OK".
+// With the cap working, that ratio never exceeds ~2.0 even when the iOS font
+// scale is higher. Shows e.g. "fs=3.57 probe=2.00 OK".
 const PROBE_BASE = 12;
+const PROBE_CAP = 2;
 function FontCapProbe() {
   const fontScale = PixelRatio.getFontScale();
   const [refH, setRefH] = useState(0);
   const [probeH, setProbeH] = useState(0);
   const ratio = refH > 0 && probeH > 0 ? probeH / refH : 0;
-  const expectedCapped = Math.min(fontScale, 1.5);
-  const ok = ratio > 0 ? Math.abs(ratio - expectedCapped) <= 0.12 : null;
+  const expectedCapped = Math.min(fontScale, PROBE_CAP);
+  const ok = ratio > 0 ? Math.abs(ratio - expectedCapped) <= 0.15 : null;
   return (
     <View>
       <Text style={styles.debugText}>
-        fontcap fs={fontScale.toFixed(2)} probe={ratio ? ratio.toFixed(2) : "-"} {ok == null ? "" : ok ? "OK" : "FAIL"}
+        fontcap fs={fontScale.toFixed(2)} probe={ratio ? ratio.toFixed(2) : "-"} cap={PROBE_CAP} {ok == null ? "" : ok ? "OK" : "FAIL"}
       </Text>
       <View style={styles.probeHidden} pointerEvents="none">
         {/* reference: explicit 1.0x cap -> never scales -> baseline height */}
         <Text maxFontSizeMultiplier={1} style={{ fontSize: PROBE_BASE }} onLayout={(e) => setRefH(e.nativeEvent.layout.height)}>Mg</Text>
-        {/* probe: no explicit cap -> subject to the global 1.5x ceiling */}
+        {/* probe: no explicit cap -> subject to the global 2x ceiling */}
         <Text style={{ fontSize: PROBE_BASE }} onLayout={(e) => setProbeH(e.nativeEvent.layout.height)}>Mg</Text>
       </View>
     </View>

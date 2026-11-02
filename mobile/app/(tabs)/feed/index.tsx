@@ -308,7 +308,7 @@ export default function Hub() {
         <FlatList
           data={listData}
           keyExtractor={(row, i) => row._row === "header" ? `h-${row.k}` : `${row.it._kind}-${row.it.id || row.it.event_id || i}`}
-          contentContainerStyle={{ padding: 16, paddingBottom: 120 }}
+          contentContainerStyle={{ padding: 16, paddingBottom: 140 }}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.teal} />}
           ListHeaderComponent={
             <>
@@ -372,7 +372,7 @@ export default function Hub() {
             <ScrollView>
               {["mine", "all", ...markets].map((m) => (
                 <Pressable key={m} testID={`market-opt-${m}`} onPress={() => { setMarketPref(m); setMarketOpen(false); }} style={styles.sheetRow}>
-                  <Text style={{ color: m === market ? colors.teal : colors.onSurface, fontWeight: m === market ? "800" : "500", fontSize: 16 }}>
+                  <Text style={{ color: m === market ? colors.teal : colors.onSurface, fontWeight: m === market ? "800" : "500", fontSize: 16, flex: 1, flexShrink: 1 }}>
                     {marketLabel(m)}
                   </Text>
                   {m === market ? <Icon name="checkmark" size={20} color={colors.teal}  footprint={20}/> : null}
@@ -388,6 +388,7 @@ export default function Hub() {
         <Pressable style={styles.backdrop} onPress={() => setComposeOpen(false)}>
           <View style={[styles.sheet, { backgroundColor: colors.surface }]}>
             <Text style={[styles.sheetTitle, { color: colors.onSurface }]}>Create</Text>
+            <ScrollView>
             {[
               { label: "New post", icon: "chatbubble-outline", go: "/new-post" },
               { label: "New marketplace listing", icon: "pricetag-outline", go: "/new-post?type=for_sale" },
@@ -397,9 +398,10 @@ export default function Hub() {
             ].map((o) => (
               <Pressable key={o.label} testID={`compose-${o.go}`} onPress={() => { setComposeOpen(false); if (isFreeIndividual(user)) { promptCommentUpgrade(toast, "Upgrade to post, start topics and create events"); return; } router.push(o.go as any); }} style={styles.sheetRow}>
                 <Icon name={o.icon as any} size={20} color={colors.teal}  footprint={20}/>
-                <Text style={{ color: colors.onSurface, fontSize: 16, marginLeft: 12 }}>{o.label}</Text>
+                <Text style={{ color: colors.onSurface, fontSize: 16, marginLeft: 12, flex: 1, flexShrink: 1 }}>{o.label}</Text>
               </Pressable>
             ))}
+            </ScrollView>
           </View>
         </Pressable>
       </Modal>

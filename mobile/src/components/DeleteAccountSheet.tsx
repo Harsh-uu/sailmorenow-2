@@ -99,7 +99,7 @@ export function DeleteAccountSheet() {
                   ) : null}
                   {ownsBusiness ? (
                     <View testID="delete-business-warning" style={{ marginTop: 12, borderRadius: 12, borderWidth: 1, borderColor: "#FCA5A5", backgroundColor: "#FEF2F2", padding: 12 }}>
-                      <Text style={{ color: "#B91C1C", fontSize: 14, fontWeight: "700", lineHeight: 20 }} maxFontSizeMultiplier={1.5}>
+                      <Text style={{ color: "#B91C1C", fontSize: 14, fontWeight: "700", lineHeight: 20 }} maxFontSizeMultiplier={2}>
                         You manage a business listing or organization. Deleting also removes your listing, reviews written about you, your followers, and your plan, cancelled immediately with no refund.
                       </Text>
                     </View>

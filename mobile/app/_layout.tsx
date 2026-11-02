@@ -20,7 +20,7 @@ LogBox.ignoreAllLogs(true);
 // -------------------------------------------------------------------------
 // App-wide CONTENT text ceiling (native only).
 //
-// GOAL: content Text/TextInput must never scale past 1.5x so extreme iOS
+// GOAL: content Text/TextInput must never scale past 2x so extreme iOS
 // accessibility sizes cannot blow up layouts, while chrome components keep their
 // own tighter explicit caps (header 1.3, tab labels 1.1, chips/badges/buttons/
 // segmented/legend 1.2).
@@ -38,7 +38,7 @@ LogBox.ignoreAllLogs(true);
 // on its module object (index.js: `get Text() { return require(...).default }`),
 // and every consumer reads them lazily at render time (`_reactNative.Text`). We
 // capture the originals, then redefine those getters to return thin wrapper
-// components that inject maxFontSizeMultiplier=1.5 ONLY when the caller did not
+// components that inject maxFontSizeMultiplier=2 ONLY when the caller did not
 // set it - so every explicit cap (inline, via StyleSheet, or passed down by a
 // wrapper component) is preserved. This changes ONE module and needs no edits to
 // the ~93 files that import Text/TextInput.
@@ -54,7 +54,7 @@ function installContentFontCap() {
     if (typeof Orig !== "function" || (Orig as any).__contentFontCapped) continue;
     const Capped = (props: any) =>
       props?.maxFontSizeMultiplier == null
-        ? <Orig {...props} maxFontSizeMultiplier={1.5} />
+        ? <Orig {...props} maxFontSizeMultiplier={2} />
         : <Orig {...props} />;
     (Capped as any).displayName = `Capped(${Orig.displayName || Orig.name || key})`;
     (Capped as any).__contentFontCapped = true;

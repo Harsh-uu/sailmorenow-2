@@ -187,12 +187,12 @@ export default function ProDetail() {
 
           <View style={styles.chips}>
             {(pro.categories || []).map((c) => (
-              <Badge key={c} label={c} tone="teal" maxScale={1.5} />
+              <Badge key={c} label={c} tone="teal" maxScale={2} />
             ))}
           </View>
           <View style={styles.chips}>
             {(pro.markets || []).map((m) => (
-              <Badge key={m} label={m} tone="muted" maxScale={1.5} />
+              <Badge key={m} label={m} tone="muted" maxScale={2} />
             ))}
           </View>
 
