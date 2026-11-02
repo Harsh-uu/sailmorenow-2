@@ -589,6 +589,9 @@ async def set_active_identity(body: Dict[str, Any],
     return {"active_identity": want, "can_use_business": eligible,
             "business_name": (pro or {}).get("company_name") if eligible else None,
             "business_listing_id": u["user_id"] if eligible else None}
+
+
+@router.get("/boat-pros/category-counts")
 async def boat_pro_category_counts(market: Optional[str] = None):
     """Count of Boat Pros per specialty (respecting the selected market) so the
     mobile filter dropdown can show how many pros match — and which are empty."""

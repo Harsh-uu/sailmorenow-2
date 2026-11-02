@@ -7,7 +7,7 @@ import Constants from "expo-constants";
  * the end of the Profile screen (testID "profile-build-stamp") that must be
  * REMOVED before launch.
  */
-export const BUILD_ID = "rv3a-24";
+export const BUILD_ID = "rv3a-25";
 export const BUILD_TIME = "2026-11-02 UTC";
 export const APP_VERSION = Constants.expoConfig?.version ?? "?";
 export const BUILD_STAMP = `build ${BUILD_ID} \u00b7 ${BUILD_TIME} \u00b7 v${APP_VERSION}`;
