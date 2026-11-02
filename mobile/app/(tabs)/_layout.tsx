@@ -71,7 +71,7 @@ export default function TabsLayout() {
             adjustsFontSizeToFit
             minimumFontScale={0.7}
             maxFontSizeMultiplier={1.15}
-            style={{ fontSize: 11, lineHeight: 14, fontWeight: "600", color, textAlign: "center", width: "100%", paddingHorizontal: 1 }}
+            style={{ fontSize: 11, fontWeight: "600", color, textAlign: "center", width: "100%", paddingHorizontal: 1, paddingBottom: 2, includeFontPadding: false }}
           >
             {children}
           </Text>

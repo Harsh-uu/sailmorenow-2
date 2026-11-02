@@ -9,6 +9,7 @@ import { MotionModal as Modal } from "@/src/components/MotionModal";
 import { api } from "@/src/lib/api";
 import { Avatar, ButtonRow, EmptyState, ErrorState, Loading } from "@/src/components/ui";
 import { useTheme } from "@/src/theme";
+import { AppHeader } from "@/src/components/AppHeader";
 import { fmtTimeAgo } from "@/src/lib/format";
 import { useAppSocket } from "@/src/context/WebSocketContext";
 import { useAuth } from "@/src/context/AuthContext";
@@ -88,10 +89,8 @@ export default function Messages() {
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.surfaceSecondary }}>
-      <SafeAreaView edges={["top"]} style={{ backgroundColor: colors.brandPrimary }}>
-        <View style={styles.header}>
-          <Text style={[styles.hTitle, { color: colors.onBrandPrimary }]} numberOfLines={1}>Messages</Text>
-          <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+      <AppHeader title="Messages" right={
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
             <NotificationBell />
             {isPaid ? (
               <Pressable testID="new-message-btn" onPress={() => router.push("/messages/new" as any)} hitSlop={10}>
@@ -99,8 +98,7 @@ export default function Messages() {
               </Pressable>
             ) : null}
           </View>
-        </View>
-      </SafeAreaView>
+      } />
 
       {unlock ? (
         <View testID="inbox-unlock-banner" style={{ flexDirection: "row", alignItems: "center", gap: 10, margin: 12, marginBottom: 0, padding: 12, borderRadius: 14, backgroundColor: colors.accent + "1A", borderWidth: 1, borderColor: colors.accent + "55" }}>
@@ -165,8 +163,8 @@ export default function Messages() {
                   </View>
                   <View style={{ flex: 1 }}>
                     <View style={styles.rowTop}>
-                      <Text style={[styles.name, { color: colors.onSurface }]} numberOfLines={1}>{title}</Text>
-                      <Text style={[styles.time, { color: colors.muted }]}>{fmtTimeAgo(item.updated_at)}</Text>
+                      <Text style={[styles.name, { color: colors.onSurface, flexShrink: 1 }]} numberOfLines={2}>{title}</Text>
+                      <Text style={[styles.time, { color: colors.muted }]} maxFontSizeMultiplier={1.3}>{fmtTimeAgo(item.updated_at)}</Text>
                     </View>
                     <View style={styles.rowBottom}>
                       <Text style={[styles.preview, { color: unread ? colors.onSurface : colors.muted, fontWeight: unread ? "700" : "400" }]} numberOfLines={1}>
@@ -203,10 +201,10 @@ export default function Messages() {
                 <Avatar uri={other?.picture || other?.avatar} name={other?.name} size={48} />
                 <View style={{ flex: 1 }}>
                   <View style={styles.rowTop}>
-                    <Text style={[styles.name, { color: colors.onSurface }]} numberOfLines={1}>
+                    <Text style={[styles.name, { color: colors.onSurface, flexShrink: 1 }]} numberOfLines={2}>
                       {other?.name || "Sailor"}
                     </Text>
-                    <Text style={[styles.time, { color: colors.muted }]}>{fmtTimeAgo(item.updated_at)}</Text>
+                    <Text style={[styles.time, { color: colors.muted }]} maxFontSizeMultiplier={1.3}>{fmtTimeAgo(item.updated_at)}</Text>
                   </View>
                   {item.viewer_is_boat_pro && item.channel === "business" && item.business_name ? (
                     <View style={[styles.labelPill, { backgroundColor: colors.brandPrimary + "1A" }]}>

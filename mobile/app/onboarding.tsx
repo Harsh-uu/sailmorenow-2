@@ -229,7 +229,7 @@ const styles = StyleSheet.create({
   gridText: { fontWeight: "700", fontSize: 15 },
   chipsWrap: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   pill: { paddingHorizontal: 14, paddingVertical: 9, borderRadius: 999, borderWidth: 1 },
-  input: { flexDirection: "row", alignItems: "center", borderWidth: 1, borderRadius: 12, paddingHorizontal: 14, height: 50 },
+  input: { flexDirection: "row", alignItems: "center", borderWidth: 1, borderRadius: 12, paddingHorizontal: 14, minHeight: 50, paddingVertical: 8 },
   textarea: { borderWidth: 1, borderRadius: 12, padding: 14, minHeight: 80, textAlignVertical: "top", fontSize: 15 },
   checkRow: { flexDirection: "row", alignItems: "center", gap: 10, marginTop: 24, marginBottom: 8 },
 });

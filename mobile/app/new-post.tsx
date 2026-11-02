@@ -229,6 +229,6 @@ function Label({ children }: { children: string }) {
 
 const styles = StyleSheet.create({
   label: { fontSize: 15, fontWeight: "800", marginTop: 20, marginBottom: 10 },
-  input: { borderWidth: 1, borderRadius: 12, paddingHorizontal: 14, height: 50, fontSize: 15 },
+  input: { borderWidth: 1, borderRadius: 12, paddingHorizontal: 14, minHeight: 50, paddingVertical: 10, fontSize: 15 },
   textarea: { borderWidth: 1, borderRadius: 12, padding: 14, minHeight: 120, textAlignVertical: "top", fontSize: 15 },
 });

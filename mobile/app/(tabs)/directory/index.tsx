@@ -12,6 +12,7 @@ import { Avatar, Button, EmptyState, ErrorState, Loading } from "@/src/component
 import { LogoCircle } from "@/src/components/LogoCircle";
 import { MultiSelectPicker } from "@/src/components/MultiSelectPicker";
 import { useTheme } from "@/src/theme";
+import { AppHeader } from "@/src/components/AppHeader";
 
 type Pro = {
   user_id: string;
@@ -100,10 +101,8 @@ export default function Directory() {
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.surfaceSecondary }}>
-      <SafeAreaView edges={["top"]} style={{ backgroundColor: colors.brandPrimary }}>
-        <View style={styles.header}>
-          <Text style={[styles.hTitle, { color: colors.onBrandPrimary }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7} maxFontSizeMultiplier={1.3}>Boat Pros</Text>
-          <View style={{ flexDirection: "row", alignItems: "center", gap: 6, flexShrink: 0 }}>
+      <AppHeader title="Boat Pros" right={
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 6, flexShrink: 0 }}>
             <Pressable testID="directory-clubs-link" onPress={() => router.push("/directory/clubs" as any)} style={styles.clubsLink} accessibilityRole="button" accessibilityLabel="Clubs and Orgs">
               <Icon name="org" size={15} color={colors.onBrandPrimary} footprint={15} />
               <Text style={{ color: colors.onBrandPrimary, fontWeight: "700", fontSize: 13 }} numberOfLines={1} maxFontSizeMultiplier={1.2}>Clubs & Orgs</Text>
@@ -111,8 +110,7 @@ export default function Directory() {
             </Pressable>
             <NotificationBell />
           </View>
-        </View>
-      </SafeAreaView>
+      } />
 
       <View style={styles.controls}>
         <View style={styles.pickerRow}>
@@ -198,7 +196,7 @@ export default function Directory() {
                 fallback={<Avatar uri={null} name={item.company_name} size={48} />} />
               <View style={{ flex: 1 }}>
                 <View style={styles.rowTop}>
-                  <Text style={[styles.title, { color: fg }]} numberOfLines={1}>
+                  <Text style={[styles.title, { color: fg, flexShrink: 1 }]} numberOfLines={2}>
                     {item.company_name}
                   </Text>
                   {item.identity_verified ? <Icon name="verified" size={16} color={colors.teal} footprint={16} testID={`pro-verified-${item.user_id}`} /> : null}

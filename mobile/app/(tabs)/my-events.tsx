@@ -8,6 +8,7 @@ import { fmtDateTime, eventTitleParts } from "@/src/lib/format";
 import { api } from "@/src/lib/api";
 import { Button, EmptyState, Loading } from "@/src/components/ui";
 import { useTheme } from "@/src/theme";
+import { AppHeader } from "@/src/components/AppHeader";
 import { useAuth } from "@/src/context/AuthContext";
 import { useToast } from "@/src/context/ToastContext";
 import { canPostEvents } from "@/src/lib/plan";
@@ -74,13 +75,10 @@ export default function MyEvents() {
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.surfaceSecondary }}>
-      <SafeAreaView edges={["top"]} style={{ backgroundColor: colors.brandPrimary }}>
-        <View style={styles.header}>
-          <Text style={[styles.hTitle, { color: colors.onBrandPrimary }]}>My Events</Text>
-          {canPostEvents(user) ? (
+      <AppHeader title="My Events" right={canPostEvents(user) ? (
             <Button title="Post" icon="add-outline" onPress={() => router.push("/new-event")} testID="post-event-btn" style={styles.postBtn} />
-          ) : null}
-        </View>
+          ) : null} />
+      <View style={{ backgroundColor: colors.brandPrimary }}>
         <View style={styles.stats}>
           <Stat label="Upcoming" value={totals.events} colors={colors} />
           <Stat label="RSVPs" value={totals.rsvps} colors={colors} />
@@ -89,11 +87,11 @@ export default function MyEvents() {
         <View style={styles.tabs}>
           {(["upcoming", "past"] as const).map((t) => (
             <Pressable key={t} testID={`myev-tab-${t}`} onPress={() => setTab(t)} style={[styles.tabBtn, { backgroundColor: tab === t ? colors.surface : "transparent" }]}>
-              <Text style={{ color: tab === t ? colors.brandPrimary : colors.onBrandPrimary, fontWeight: "700", fontSize: 13, textTransform: "capitalize" }}>{t}</Text>
+              <Text style={{ color: tab === t ? colors.brandPrimary : colors.onBrandPrimary, fontWeight: "700", fontSize: 13, textTransform: "capitalize" }} maxFontSizeMultiplier={1.2}>{t}</Text>
             </Pressable>
           ))}
         </View>
-      </SafeAreaView>
+      </View>
 
       {events === null ? (
         <Loading />

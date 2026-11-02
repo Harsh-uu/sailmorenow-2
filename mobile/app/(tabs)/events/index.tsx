@@ -10,6 +10,7 @@ import dayjs from "dayjs";
 import { api } from "@/src/lib/api";
 import { Badge, Button, EmptyState, ErrorState, Loading, Picker, SegmentedControl } from "@/src/components/ui";
 import { useTheme } from "@/src/theme";
+import { AppHeader } from "@/src/components/AppHeader";
 import { useAuth } from "@/src/context/AuthContext";
 import { useToast } from "@/src/context/ToastContext";
 import { canPostEvents } from "@/src/lib/plan";
@@ -228,10 +229,8 @@ export default function Events() {
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.surfaceSecondary }}>
-      <SafeAreaView edges={["top"]} style={{ backgroundColor: colors.brandPrimary }}>
-        <View style={styles.header}>
-          <Text style={[styles.hTitle, { color: colors.onBrandPrimary }]} numberOfLines={1}>Events</Text>
-          <View style={{ flexDirection: "row", alignItems: "center", gap: 16 }}>
+      <AppHeader title="Events" right={
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 16 }}>
             {user ? (
               <Pressable testID="my-crew-listings-btn" accessibilityRole="button" accessibilityLabel="My Crew Listings" onPress={() => router.push("/my-crew-listings" as any)} hitSlop={10}>
                 <Icon name="people-outline" size={22} color={colors.onBrandPrimary} footprint={22} />
@@ -255,7 +254,8 @@ export default function Events() {
               </Pressable>
             ) : null}
           </View>
-        </View>
+      } />
+      <View style={{ backgroundColor: colors.brandPrimary }}>
         <View style={{ flexDirection: "row", gap: 10, paddingHorizontal: 16, paddingBottom: 12 }}>
           <Picker testID="market-picker" title="Choose market" icon="location" flex
             value={market} onChange={(v) => setMarketPref(v)}
@@ -264,7 +264,7 @@ export default function Events() {
             value={category} onChange={setCategory}
             options={CATEGORIES.map((c) => ({ value: c.id, label: c.id === "" ? "All categories" : c.label }))} />
         </View>
-      </SafeAreaView>
+      </View>
 
       {events == null && !error ? (
         <Loading />
@@ -305,12 +305,12 @@ export default function Events() {
                   <Text style={[styles.title, { color: colors.onSurface }]} numberOfLines={2}>
                     {tp.title}
                   </Text>
-                  <Text style={[styles.when, { color: colors.onSurfaceSecondary }]} numberOfLines={1} testID={`event-when-${item.id}`}>
+                  <Text style={[styles.when, { color: colors.onSurfaceSecondary }]} numberOfLines={2} testID={`event-when-${item.id}`}>
                     {fmtListDateTime(item.starts_at, item.time_not_listed)}
                   </Text>
                   <View style={styles.metaRow}>
                     <Icon name="location-outline" size={13} color={colors.muted}  footprint={13}/>
-                    <Text style={[styles.meta, { color: colors.muted }]} numberOfLines={1}>
+                    <Text style={[styles.meta, { color: colors.muted, flexShrink: 1 }]} numberOfLines={2}>
                       {item.location ? `${item.location} · ` : ""}{item.market}
                     </Text>
                   </View>

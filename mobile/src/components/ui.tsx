@@ -247,7 +247,7 @@ export function Badge({ label, tone = "teal" }: { label: string; tone?: "teal" |
   }[tone];
   return (
     <View style={[styles.badge, { backgroundColor: map.bg }]}>
-      <Text style={[styles.badgeText, { color: map.fg }]}>{label}</Text>
+      <Text numberOfLines={2} maxFontSizeMultiplier={1.2} style={[styles.badgeText, { color: map.fg }]}>{label}</Text>
     </View>
   );
 }
@@ -276,7 +276,7 @@ export function Chip({
         },
       ]}
     >
-      <Text style={{ color: active ? colors.onBrandPrimary : colors.onSurfaceSecondary, fontWeight: "600", fontSize: 13 }}>
+      <Text numberOfLines={2} maxFontSizeMultiplier={1.2} style={{ color: active ? colors.onBrandPrimary : colors.onSurfaceSecondary, fontWeight: "600", fontSize: 13 }}>
         {label}
       </Text>
     </Pressable>
@@ -298,13 +298,14 @@ export function Avatar({ uri, name, size = 40 }: { uri?: string | null; name?: s
     // on a FIXED white circle (matching LogoCircle) so a transparent PNG reads
     // cleanly in dark mode. Personal photos keep the neutral surface backing.
     const isOrgLogo = /\/org\//.test(resolved);
-    return <Image accessibilityLabel={name ? `${name}'s avatar` : "Avatar"} source={{ uri: resolved }} resizeMode="cover" style={{ width: size, height: size, borderRadius: size / 2, backgroundColor: isOrgLogo ? "#fff" : colors.surfaceTertiary }} />;
+    return <Image accessibilityLabel={name ? `${name}'s avatar` : "Avatar"} source={{ uri: resolved }} resizeMode="cover" style={{ width: size, height: size, flexShrink: 0, borderRadius: size / 2, backgroundColor: isOrgLogo ? "#fff" : colors.surfaceTertiary }} />;
   }
   return (
     <View
       style={{
         width: size,
         height: size,
+        flexShrink: 0,
         borderRadius: size / 2,
         backgroundColor: colors.tealSoft,
         alignItems: "center",
@@ -390,8 +391,8 @@ export function SegmentedControl({ options, value, onChange, testID, style }: {
         return (
           <Pressable key={o.value} testID={`${testID}-${o.value}`} accessibilityRole="radio"
             accessibilityState={{ selected: active }} accessibilityLabel={o.label}
-            onPress={() => onChange(o.value)} style={[segStyles.seg, active && { backgroundColor: colors.brandPrimary }]}>
-            <Text numberOfLines={1} style={{ color: active ? colors.onBrandPrimary : colors.onSurfaceSecondary, fontWeight: "700", fontSize: 13 }}>{o.label}</Text>
+            onPress={() => onChange(o.value)} style={[segStyles.seg, { flex: 1 }, active && { backgroundColor: colors.brandPrimary }]}>
+            <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8} maxFontSizeMultiplier={1.2} style={{ color: active ? colors.onBrandPrimary : colors.onSurfaceSecondary, fontWeight: "700", fontSize: 13, textAlign: "center" }}>{o.label}</Text>
           </Pressable>
         );
       })}
@@ -499,9 +500,9 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     padding: 16,
   },
-  badge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 999, alignSelf: "flex-start" },
+  badge: { paddingHorizontal: 10, paddingVertical: 4, minHeight: 24, justifyContent: "center", borderRadius: 999, alignSelf: "flex-start" },
   badgeText: { fontSize: 11, fontWeight: "700", letterSpacing: 0.3 },
-  chip: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 999, borderWidth: 1, marginRight: 8 },
+  chip: { paddingHorizontal: 14, paddingVertical: 8, minHeight: 38, justifyContent: "center", borderRadius: 999, borderWidth: 1, marginRight: 8 },
   center: { flex: 1, alignItems: "center", justifyContent: "center", padding: 32, gap: 10 },
   emptyTitle: { fontSize: 17, fontWeight: "700", marginTop: 4 },
   dim: { fontSize: 14 },

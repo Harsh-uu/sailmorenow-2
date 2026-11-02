@@ -8,6 +8,7 @@ import { api } from "@/src/lib/api";
 import { useAuth } from "@/src/context/AuthContext";
 import { Button, Badge, EmptyState, Loading } from "@/src/components/ui";
 import { useTheme } from "@/src/theme";
+import { AppHeader } from "@/src/components/AppHeader";
 
 function MonthDelta({ arr, colors }: { arr: any[]; colors: any }) {
   const [open, setOpen] = useState(false);
@@ -53,11 +54,7 @@ export default function MyListing() {
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.surfaceSecondary }}>
-      <SafeAreaView edges={["top"]} style={{ backgroundColor: colors.brandPrimary }}>
-        <View style={styles.header}>
-          <Text style={[styles.hTitle, { color: colors.onBrandPrimary }]}>My Listing</Text>
-        </View>
-      </SafeAreaView>
+      <AppHeader title="My Listing" />
 
       {pro === undefined ? (
         <Loading />

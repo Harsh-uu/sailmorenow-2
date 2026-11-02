@@ -453,7 +453,7 @@ export default function Profile() {
               <Icon name={uploading ? "hourglass-outline" : "camera"} size={14} color={colors.onAccent} footprint={14} />
             </View>
           </Pressable>
-          <Text style={styles.name}>{user.name}</Text>
+          <Text style={styles.name} numberOfLines={2}>{user.name}</Text>
           {user.handle ? <Text style={styles.handle}>@{user.handle}</Text> : null}
           <View style={styles.heroBadges}>
             {user.account_type !== "partner" && (ACCOUNT_TYPE_LABELS[user.account_type || ""] || "Member") !== tierBadge ? (
@@ -818,7 +818,7 @@ export default function Profile() {
                 return (
                   <Pressable key={opt.key} testID={`theme-${opt.key}`} onPress={() => setPref(opt.key)} style={[styles.segment, active && { backgroundColor: colors.teal }]}>
                     <Icon name={opt.icon} size={18} color={active ? colors.onBrandSecondary : colors.onSurfaceSecondary} footprint={18} />
-                    <Text style={[styles.segmentText, { color: active ? colors.onBrandSecondary : colors.onSurface }]}>{opt.label}</Text>
+                    <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8} maxFontSizeMultiplier={1.2} style={[styles.segmentText, { color: active ? colors.onBrandSecondary : colors.onSurface }]}>{opt.label}</Text>
                   </Pressable>
                 );
               })}
@@ -990,9 +990,9 @@ function Row({ icon, label, onPress, testID }: { icon: any; label: string; onPre
 }
 
 const styles = StyleSheet.create({
-  hero: { alignItems: "center", paddingVertical: 24, gap: 6 },
+  hero: { alignItems: "center", paddingVertical: 24, paddingHorizontal: 20, gap: 6 },
   camBadge: { position: "absolute", right: -2, bottom: -2, width: 26, height: 26, borderRadius: 13, alignItems: "center", justifyContent: "center", borderWidth: 2, borderColor: "#1F3F5B" },
-  name: { color: "#fff", fontSize: 20, fontWeight: "800", marginTop: 8 },
+  name: { color: "#fff", fontSize: 20, fontWeight: "800", marginTop: 8, textAlign: "center" },
   handle: { color: "#CBD5E1", fontSize: 14 },
   heroBadges: { flexDirection: "row", gap: 8, marginTop: 8 },
   section: { borderWidth: 1, borderRadius: 16, overflow: "hidden" },
@@ -1007,5 +1007,5 @@ const styles = StyleSheet.create({
   mktRow: { flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 12, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: "rgba(0,0,0,0.06)" },
   row: { flexDirection: "row", alignItems: "center", gap: 12, paddingHorizontal: 16, paddingVertical: 15 },
   rowLabel: { flex: 1, fontSize: 15, fontWeight: "600" },
-  handleRow: { flexDirection: "row", alignItems: "center", borderWidth: 1, borderRadius: 10, paddingHorizontal: 12, height: 44 },
+  handleRow: { flexDirection: "row", alignItems: "center", borderWidth: 1, borderRadius: 10, paddingHorizontal: 12, minHeight: 44 },
 });

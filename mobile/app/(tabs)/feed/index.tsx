@@ -10,6 +10,7 @@ import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
 import { api, ApiError } from "@/src/lib/api";
 import { Avatar, Badge, Chip, EmptyState, ErrorState, Loading, Picker, FilterButton } from "@/src/components/ui";
 import { useTheme } from "@/src/theme";
+import { AppHeader } from "@/src/components/AppHeader";
 import { fmtTimeAgo } from "@/src/lib/format";
 import { useAuth } from "@/src/context/AuthContext";
 import { useMarketPref, setMarketPref, marketParam, marketLabel } from "@/src/lib/marketPref";
@@ -281,24 +282,23 @@ export default function Hub() {
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.surfaceSecondary }}>
-      <SafeAreaView edges={["top"]} style={{ backgroundColor: colors.brandPrimary }}>
-        <View style={styles.header}>
-          <Text style={[styles.hTitle, { color: colors.onBrandPrimary }]}>Hub</Text>
-          <View style={{ flexDirection: "row", alignItems: "center", gap: 16 }}>
+      <AppHeader title="Hub" right={
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 16 }}>
             <Pressable testID="market-selector-btn" onPress={() => setMarketOpen(true)} style={styles.marketBtn}>
               <Icon name="location" size={14} color={colors.onBrandPrimary}  footprint={14}/>
-              <Text style={styles.marketText} numberOfLines={1}>{marketLabel(market)}</Text>
+              <Text style={styles.marketText} numberOfLines={1} maxFontSizeMultiplier={1.2}>{marketLabel(market)}</Text>
               <Icon name="chevron-down" size={14} color={colors.onBrandPrimary}  footprint={14}/>
             </Pressable>
             <NotificationBell href="/feed/notifications" />
           </View>
-        </View>
+      } />
+      <View style={{ backgroundColor: colors.brandPrimary }}>
         <View style={{ paddingHorizontal: 16, paddingBottom: 12 }}>
           <Picker testID="hub-filter" title="Show" icon="options-outline"
             value={filter} onChange={(v) => { if (v === "crew") { router.push("/feed/crew-bank" as any); return; } setFilter(v); }}
             options={FILTERS.map((f) => ({ value: f.key, label: f.label }))} />
         </View>
-      </SafeAreaView>
+      </View>
 
       {items == null && !error ? (
         <Loading />
@@ -308,7 +308,7 @@ export default function Hub() {
         <FlatList
           data={listData}
           keyExtractor={(row, i) => row._row === "header" ? `h-${row.k}` : `${row.it._kind}-${row.it.id || row.it.event_id || i}`}
-          contentContainerStyle={{ padding: 16, paddingBottom: 100 }}
+          contentContainerStyle={{ padding: 16, paddingBottom: 120 }}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.teal} />}
           ListHeaderComponent={
             <>
@@ -469,7 +469,7 @@ function HubCard({ item, rx, onPress, onReact, expanded, onOpenFull, onCompose, 
         </Pressable>
         <View style={{ flex: 1 }}>
           <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
-            <Text onPress={authorHandle ? goAuthor : undefined} style={[styles.author, { color: colors.onSurface, flexShrink: 1 }]} numberOfLines={1}>{author || "Sail More Now"}</Text>
+            <Text onPress={authorHandle ? goAuthor : undefined} style={[styles.author, { color: colors.onSurface, flexShrink: 1 }]} numberOfLines={2}>{author || "Sail More Now"}</Text>
             <PartnerBadge kind={item.author_partner_badge || item.organizer_partner_badge} />
           </View>
           <Text style={[styles.meta, { color: colors.muted }]}>{(item.market ? item.market + " · " : "")}{fmtTimeAgo(when)}</Text>

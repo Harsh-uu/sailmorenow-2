@@ -24,7 +24,7 @@ function ReviewAuthor({ a }: { a: any }) {
       ) : (
         <Avatar uri={a?.avatar} name={name} size={36} />
       )}
-      <Text numberOfLines={1} style={{ color: colors.onSurface, fontWeight: "700", fontSize: 14, flex: 1 }}>{name}</Text>
+      <Text numberOfLines={2} style={{ color: colors.onSurface, fontWeight: "700", fontSize: 14, flex: 1, flexShrink: 1 }}>{name}</Text>
     </Pressable>
   );
 }
@@ -80,7 +80,7 @@ export function ReviewsSection({ targetId, kind = "member", identity = "business
         ) : (
           <View testID="reviews-summary-overall" style={{ gap: 8 }}>
             <View>
-              <Text numberOfLines={1} style={{ color: colors.onSurface, fontWeight: "800", fontSize: 14 }}>Overall {Number(summary.overall).toFixed(1)} <Text style={{ color: colors.muted, fontWeight: "500" }}>· {countLabel}</Text></Text>
+              <Text numberOfLines={2} style={{ color: colors.onSurface, fontWeight: "800", fontSize: 14 }}>Overall {Number(summary.overall).toFixed(1)} <Text style={{ color: colors.muted, fontWeight: "500" }}>· {countLabel}</Text></Text>
               <View style={{ marginTop: 1, alignSelf: "flex-start" }}><Stars value={summary.overall} /></View>
             </View>
             <FactorList rows={factorRows} />
