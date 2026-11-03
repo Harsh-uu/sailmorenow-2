@@ -1,160 +1,342 @@
-# BILLING-PLAN-1 — Move to Stripe auto-renewing subscriptions (PLAN ONLY)
+# BILLING-PLAN-1 - Stripe test webhook re-point, end-to-end test-mode script, and live go-live runbook
+PLAN ONLY. No code, no emails, no secrets changed, no testing agent. Hyphens only.
+(An earlier, different BILLING-PLAN-1 draft - "move to Stripe auto-renewing
+subscriptions" - was preserved as BILLING-PLAN-legacy.md.)
 
-Status: PLAN ONLY. No code, no Stripe provisioning, no data changes made. Stripe facts below were checked against current Stripe docs (API version 2026-09-30.endive is the latest as of research). Campaigns stays OFF throughout.
+Verified from code (sources): routers/payments_router.py (checkout, portal,
+status, webhook), billing.py (trial settings, entitlement), constants.py
+(SUBSCRIPTION_PACKAGES), setup_stripe.py (catalog), deps.py (Stripe key -> mode),
+mailer.py (billing + welcome emails, app_public_url).
 
-Jenn's decisions (fixed): paid at signup, AUTO-RENEW until cancelled, at the end of the committed term (1/3/6/12 months). Upgrades immediate with credit for unused time. Downgrades never charge, apply at term end. Cancel stops renewal, keeps tier until term end. ToS already promises auto-renew + cancel-in-account, plus a 30-day free trial.
+Key facts up front:
+- Webhook route (router is mounted under /api): BOTH `/api/stripe/webhook` and
+  `/api/webhook/stripe` are accepted (payments_router.py:692-693). Use
+  `/api/stripe/webhook`.
+- Webhook handler acts on: checkout.session.completed, customer.subscription.*
+  (created/updated/deleted), invoice.paid, invoice.payment_failed
+  (_handle_event, payments_router.py:634-650). Signature verified with
+  STRIPE_WEBHOOK_SECRET (line 698); events are idempotent via db.stripe_events
+  (704-709).
+- Customer portal: POST /api/payments/portal, returns a Stripe-hosted URL,
+  return_url = {origin}/my-plan (562-574). Requires the Stripe Customer Portal to
+  be ACTIVATED in the dashboard (test and live are separate).
+- Trial: TRIAL default ON, TRIAL_DAYS default 30 (billing.py:25-26); checkout sets
+  `trial_period_days = 30` when the user is trial-eligible and no promo code
+  (payments_router.py:198-212). Eligible = tier free, not trial_used, not
+  had_paid_plan (billing.py:60-70). A signup/promo code REPLACES the trial.
+- Prices (constants.py:83-100): Sailor Premium and Boat Owner Premium = $6.99/mo;
+  Boat Pro Basic $12.99, Featured $19.99, Premium $29.99. CHEAPEST plan = $6.99
+  (sailor_premium_1 / owner_premium_1) - use this for the real-money live test.
+- Stripe mode is driven by WHICH secret key is in STRIPE_API_KEY (deps.py:26-30):
+  sk_test_* = test, sk_live_* = live. STRIPE_MODE exists in .env but is not read by
+  code (informational only). Email links use APP_PUBLIC_URL (default
+  https://app.sailmorenow.com), mailer.py:1225-1229.
+- Current preview backend base (TEST): the value of REACT_APP_BACKEND_URL,
+  currently https://owsa-events-preview--7evdsk8f.preview.emergentagent.com. This
+  changes on every fork/republish - ALWAYS read it fresh from frontend/.env.
 
----
-## 1. Replacing the stacking / queue model
+================================================================================
+## 1) Re-point the Stripe TEST webhook to THIS build
 
-Today (one-time Checkout + queue): the 11 Terms-Checklist "stacking rules" (PRD lines 135-145). Mapping each to the new subscription model:
+Why: the TEST webhook still points at a previous job's preview URL, so test-mode
+subscription/payment events never reach this build and My plan / welcome emails
+will not update after a test payment.
 
-- RULE 1 (calendar-month term) — KEEP the idea; Stripe owns the dates now. A term = a recurring Price interval (1-month, 3-month, 6-month, 12-month). `current_period_end` is the renewal date.
-- RULE 2 (Boat Pro immediate prorated upgrade, keep end date) — KEEP, but via Stripe `Subscription.modify(proration_behavior="always_invoice")`: immediate tier change, Stripe credits unused time and charges only the difference now. (Behavioural note vs today: Stripe by default keeps the same period end; "credit for unused time" is automatic.)
-- RULE 3 (max one queued plan), RULE 4 (queued plan keeps its tier), RULE 5 (no refund/credit/proration on stacks), RULE 7 (queued start=current end) — REMOVE. There is no queue; renewal is automatic.
-- RULE 6 (sailors/owners single paid tier) — KEEP.
-- RULE 8 (lapse to free when nothing queued) — REPLACE with subscription status: `active`/`trialing`/`past_due` = entitled; `canceled`/`unpaid` = free. No lazy `promote_or_lapse`.
-- RULE 9 (banned holds queue) — REPLACE: on ban we revoke app access and `pause`/`cancel` the Stripe subscription; on unban, resume.
-- RULE 10 (deletion handling of paid queue) — REPLACE: on delete, cancel the subscription (Stripe handles remaining period per settings).
-- RULE 11 (test mode during alpha) — KEEP.
+Exact TEST endpoint URL for this build:
+  https://owsa-events-preview--7evdsk8f.preview.emergentagent.com/api/stripe/webhook
+  (= current REACT_APP_BACKEND_URL + /api/stripe/webhook; re-read .env if the
+  preview URL has changed.)
 
-Concretely REMOVED: `queued_plans` model, `create_checkout` 409 queue-full block, `stacked_checkout_msg`/`queue_full_msg`/`PLAN_STACK_PRICING_LINE`, `promote_or_lapse` promotion/lapse logic, the one-time prorated-`/payments/upgrade` custom-amount path, the "Buy more time" card (web `MyPlan.jsx`, mobile `my-plan.tsx`) and the pricing-page "Plans stack…" line. "Buy more time" has no meaning once renewal is automatic.
-KEPT/REWORDED: tier labels, term options (now as Prices), the upgrade action (reworded "Upgrade now — you're charged the prorated difference and keep your renewal date"). Alpha data is deleted before launch, so NO queued-plan data migration is needed.
+Route (backend): POST /api/stripe/webhook (alias POST /api/webhook/stripe) ->
+payments_router.stripe_webhook.
 
-## 2. Stripe objects, prices, webhooks (single source of truth)
+Events to subscribe to (exactly these six):
+  - checkout.session.completed
+  - customer.subscription.created
+  - customer.subscription.updated
+  - customer.subscription.deleted
+  - invoice.paid
+  - invoice.payment_failed
 
-- **Products:** one per tier that has its own feature set — Boat Pro Basic / Featured / Premium, Sailor Premium, Boat Owner Premium (5). (Community Partner handled in §6b.)
-- **Prices (recurring), one per term, each with a stable `lookup_key`:** e.g. `pro_basic_monthly`, `pro_basic_6mo`, `pro_basic_annual`, … mapping today's catalog:
-  - Boat Pro 12.99/19.99/29.99 monthly base; terms 1/6/12 (discount 0/10/20%).
-  - Sailor & Owner Premium 6.99 monthly base; terms 1/3/6/12 (0/10/15/20%).
-  - Encode a term as interval+interval_count with the discount baked into the amount: 1mo = `month`; 3mo = `month`×3; 6mo = `month`×6; 12mo = `year`. Amount = monthly×months×(1−discount), charged once per interval, auto-renewing. Resolve Prices by `lookup_key` at runtime, never hardcode IDs.
-- **Customer:** one Stripe Customer per user/account (store `stripe_customer_id` on the user; reuse for every Checkout/Portal). This is the "one business per account" anchor (§6c).
-- **Checkout Session** `mode=subscription` for signup; `Subscription.modify` for upgrade; **Subscription Schedule** for downgrade (§ below); `cancel_at_period_end` for cancel.
-- **Webhooks = single source of truth.** Verify signatures on the raw body. Handle: `checkout.session.completed`, `customer.subscription.created/updated/deleted`, `invoice.paid`, `invoice.payment_failed`, `invoice.payment_action_required`, `customer.updated`. On each, fetch the live Subscription and write our entitlement: `{status, tier (from the item price lookup_key), current_period_end, cancel_at_period_end, scheduled_price (if a schedule), provider:"stripe"}`. Idempotent per event id. The app NEVER grants a tier except from a webhook-derived entitlement.
-- **Downgrade at term end (no charge):** attach a **Subscription Schedule** — current phase ends at `current_period_end`, next phase starts then at the lower-price `lookup_key` with `proration_behavior:"none"`. Or configure the Customer Portal with `schedule_at_period_end` + condition `decreasing_item_amount`. Show it in-app as a "scheduled change".
-- **Upgrade (immediate, credited):** `Subscription.modify(items=[{id, price: <higher lookup_key>}], proration_behavior="always_invoice")`. Preview with the invoice-preview endpoint before confirming so the UI can show the exact charge.
-- **Failed renewals / dunning:** enable Smart Retries + set the final action in the Dashboard. Access policy by status: `active`/`trialing` = full; `past_due` = KEEP access during retries + show a "update your card" banner; `canceled`/`unpaid` = revoke to free. If `invoice.payment_action_required`, surface the `hosted_invoice_url` for 3DS.
-- **Card updates / self-serve management:** Stripe **Customer Portal** (create a billing-portal session with a `return_url`). Portal handles update card, cancel, view invoices, and (configured) scheduled downgrades. This is where a member updates their card.
+How the signing secret is stored:
+  - Backend reads STRIPE_WEBHOOK_SECRET from backend/.env (imported in
+    payments_router.py:17; used at line 698). It is an existing key in .env -
+    never deleted, only its value updated.
+  - It must hold the TEST endpoint's signing secret (whsec_...) for test mode.
 
-## 3. Sandbox vs shared test key; going live
+How Jenn enters the new secret (secure card - NOT in chat, NOT hand-edited in
+.env):
+  - The agent opens the secure "secrets" card for the key STRIPE_WEBHOOK_SECRET
+    (the key-management pop-up). Jenn pastes the whsec_... value from the Stripe
+    test endpoint into that card. We never ask for or accept the value in chat and
+    never edit the .env line by hand.
+  - Stripe test/live are two different signing secrets. For preview/test we set
+    the TEST whsec_. (At go-live the LIVE whsec_ goes into the live slot - see
+    section 3.)
+  - After the value is saved, restart the backend so it is picked up
+    (sudo supervisorctl restart backend).
 
-- **Now:** the app uses a shared Stripe TEST key. Recommend provisioning a **dedicated claimable Sandbox** (isolated products/prices/webhooks/settings, own `sk_test_`/`pk_test_`) so our subscription catalog and webhook config don't collide with other test data, and so the account can later be claimed and switched to live without rebuilding. Objects in a sandbox are invisible to live mode and cannot be shared.
-- **Test mode behaviour:** `sk_test_`/`pk_test_` keys; use Stripe's test cards (incl. the `4000...0341` renewal-fail card and `...3155` 3DS) for dunning/SCA. (Stripe test clocks still don't apply on the current shared key; a claimed sandbox CAN use test clocks to fast-forward renewals — see §9.)
-- **Going live:** set live keys (`sk_live_`/`pk_live_`) in the secrets store, and re-create the Prices, Portal config and webhook endpoint in **live** mode (sandbox objects don't carry over). Keys live in env/secrets, never in code.
-- **Confirm:** deploying/publishing NEVER switches to live keys on its own. The key is read from the secrets store at runtime; nothing in the deploy flow flips test→live. Live only happens when someone explicitly sets the live key values.
+Steps (who does what):
+  1. Jenn (Stripe Dashboard, TEST mode): Developers -> Webhooks -> either edit the
+     stale endpoint's URL or Add endpoint with the URL above; select the six
+     events; Save. [verify: the endpoint shows "Enabled" and lists the 6 events.]
+  2. Jenn (Stripe): click the endpoint -> reveal the Signing secret (whsec_...).
+  3. Agent + Jenn (secure card): agent opens the STRIPE_WEBHOOK_SECRET card; Jenn
+     pastes the whsec_. Agent restarts backend.
+  4. Confirm delivery (Stripe): use "Send test webhook" on the endpoint (e.g.
+     checkout.session.completed) and check "Recent deliveries" shows HTTP 200.
+     [A bad secret returns HTTP 400 "received: false" -> the whsec_ is wrong,
+     re-enter via the card.]
+  5. Cross-check in app: after the real test purchase (section 2), db.stripe_events
+     has the event ids and My plan reflects the subscription - the true end-to-end
+     confirmation.
 
-## 4. Mobile return + IAP coexistence
+Rollback: if the new endpoint misbehaves, disable it in Stripe (events stop
+flowing; no data harmed). Re-enable after fixing the URL/secret.
 
-- Stripe does NOT support universal links for return URLs — must use a **custom app scheme**. Two viable designs:
-  - (A, recommended) Native **`@stripe/stripe-react-native` PaymentSheet** with `returnURL: "<scheme>://stripe-redirect"` + `handleURLCallback` in the root deep-link listener; use `Linking.createURL()` so the scheme is stable across Expo Go and builds. Cleanest return + no dead browser tab.
-  - (B) Keep hosted Checkout/Portal but set `success_url`/`return_url` to a tiny **backend bridge page (https)** that 302-redirects to `<scheme>://…`, opened via `WebBrowser.openAuthSessionAsync` (which captures the redirect and auto-closes). Reuses the pattern already used for Google auth.
-- **Refresh after payment:** on deep-link return, re-fetch `/payments/subscription`; do NOT trust the client — the webhook is the source of truth, so poll briefly until the entitlement reflects the change (today the mobile upgrade does no polling — fix that).
-- **What web Stripe needs from IAP-0:** ONE entitlement record per user with a `provider` field (`stripe` | `apple` | `google`) and at most one active paid entitlement; the backend owns it. Web/desktop purchases are Stripe and own the entitlement there; in-app iOS/Android purchases would write the same single record via Apple/Google server notifications. IAP-0 must define precedence when a user somehow has both (recommend: block a second provider while one is active).
+================================================================================
+## 2) End-to-end TEST-MODE script (phone browser + desktop)
 
-## 5. The 30-day trial (ToS) vs "paid at signup"
+Pre-req: section 1 done (test webhook points here, correct whsec_). Use Stripe
+TEST cards. Keep it to ONE throwaway account.
 
-- These two ToS promises conflict; pick one model (Jenn decides):
-  - **Trial-first:** Checkout `mode=subscription` with `subscription_data.trial_period_days=30`. Card handling:
-    - **Card at signup** (`payment_method_collection:"always"`): status `trialing` for 30 days, then auto-converts — the first invoice charges the committed term automatically at day 31. Best for conversion; matches "paid at signup" intent minus the first 30 days.
-    - **No card** (`payment_method_collection:"if_required"` + `trial_settings.end_behavior.missing_payment_method:"cancel"` or `"pause"`): free for 30 days, then cancels/pauses unless a card is added. Lower friction, lower conversion.
-  - **Paid-at-signup, no trial:** charge immediately; drop the trial from ToS or treat the trial as a launch-period promo (§6a).
-- **Conflict to flag:** Stripe **promotion codes are NOT supported in Checkout sessions that use trial offers** — so a "30-day trial" and a "90-day tester promo code" cannot both be applied through the trial mechanism in the same Checkout. Use the trial for the public launch and the coupon for testers (mutually exclusive per session).
+Run the money steps on DESKTOP (Stripe Checkout + portal are easiest there); the
+new-account + My plan checks also work on a PHONE browser - do a quick phone pass
+of signup and My plan to confirm mobile layout.
 
-## 6. Added scope
+Test cards (Stripe test mode):
+  - Success: 4242 4242 4242 4242, any future expiry, any CVC, any ZIP.
+  - Failure (declined): 4000 0000 0000 0002.
+  - (Optional) requires authentication: 4000 0025 0000 3155.
 
-**(a) Tester promo — 90 days free, tester-only, single-use, expiring.**
-- Coupon `percent_off=100`, `duration="repeating"`, `duration_in_months=3` (≈90 days; note 3 calendar months ≠ exactly 90 days — if exact 90 is required, use a 90-day `trial_end` instead of a coupon). Promotion code with `max_redemptions=1` (single use), `expires_at` (expiry), `restrictions.first_time_transaction=true`; "tester-only" = hand the code only to testers (or generate one code per tester). Require a card at signup so conversion is automatic.
-- **Day 91:** coupon ends → the next invoice charges the normal committed-term price on the stored card. No card on file → `past_due` → dunning → revoke. So a card at signup is required for a clean auto-convert.
+Step A - New free account
+  Do: Sign up a fresh throwaway account (a +tag email Jenn controls). Verify the
+  email via the link.
+  Expect: lands as a FREE member; can browse; can post/comment/react (free-tier).
+  Where: nav shows signed-in; My plan shows "Free".
 
-**(b) Community Partner variable-price item.** Model as a Product with a **`custom_unit_amount`** recurring Price (set `minimum`/`maximum`/`preset`) so the amount can vary per partner, or create a bespoke Price per partner deal. Still a normal auto-renewing subscription; entitlement = partner tier. (Org/partner tiers remain NOT self-serve in the public pricing UI.)
+Step B - Start the 30-day trial on Premium
+  Do: Pricing / My plan -> choose Premium (Sailor or Owner, $6.99/mo) -> Checkout.
+  Expect: Stripe Checkout shows "30 days free, then $6.99/month" and still collects
+  a card. Where: Stripe Checkout summary; /api/payments/checkout returned
+  trial=true, trial_days=30.
 
-**(c) Company-level billing.** Business name + tax ID on receipts = set `Customer.name` and `Customer.tax_ids`, enable invoice/receipt emails and (if needed) Stripe Tax/`automatic_tax`. **One business per account** = one Stripe Customer per account (enforced by storing a single `stripe_customer_id`). **Ownership transfer** = update the Customer's email/owner mapping in our DB and keep the same Customer/subscription (no Stripe migration needed); define an admin action. **Reporting** = Stripe Dashboard + Sigma/exports; optionally mirror key fields to our DB for in-app reporting.
+Step C - Pay with a test card
+  Do: enter 4242... and complete.
+  Expect: redirect back to My plan. Webhook fires checkout.session.completed +
+  customer.subscription.created (status "trialing"). Where:
+    - Stripe: endpoint Recent deliveries = 200; Customers shows the new customer +
+      subscription "trialing"; a $0 trial / upcoming invoice.
+    - App My plan: Premium, status "trialing", "free until <~30 days>", a charge
+      date, and a "Manage billing" entry.
 
-**(d) Zoho receiving subscription events.** On each billing webhook, enqueue a Zoho **CRM** event via the existing `zoho_sync.record_sub_event` (Started, Renewed, Upgraded, Downgrade-scheduled, Cancelled, Lapsed/Unpaid, Trial-started, Trial-converted). CRM only — **Campaigns stays OFF**. Reuse the current outbox so it's durable/idempotent.
+Step D - Check My plan
+  Expect: Premium, trialing, free-until ~30 days out, cancel guidance, and the
+  option to pick a longer plan length. Where: /my-plan
+  (GET /api/payments/subscription).
 
-## 7. Existing alpha accounts
-Grandfathering is acceptable and alpha data is deleted before launch, so there is NO production migration: no `queued_plans` to convert, no legacy subscriptions to re-anchor. Clean cut-over to the new catalog.
+Step E - Check admin
+  Do: as admin, open admin billing / members.
+  Expect: account shows Premium / trialing. Where: admin members; GET
+  /api/admin/billing/trial = {trial_enabled:true, trial_days:30}.
 
-## 8. UI — Subscription section (web + mobile) + EXACT wording for Jenn to approve
+Step F - Paid welcome email (to jenn@sailmorenow.com only)
+  Note: the welcome email goes to the ACCOUNT email, once (welcome_sent guard,
+  payments_router.py:660-670). To keep it to jenn@sailmorenow.com ONLY, run this
+  test with the throwaway account's email = jenn@sailmorenow.com (or a +tag that
+  delivers to it). Do NOT send to any real customer.
+  Expect: one "Welcome to Sail More Now" email naming the tier + renew date. Where:
+  jenn@sailmorenow.com inbox; Resend shows one send.
 
-Reuse existing MyPlan styles. Replace the "Upgrade your tier" + "Buy more time" cards with ONE Subscription card.
+Step G - Customer portal
+  Do: My plan -> Manage billing (POST /api/payments/portal).
+  Expect: redirect to Stripe portal (card, invoices, cancel); return_url back to
+  /my-plan. [If "No billing account yet" -> customer not created, re-check the
+  purchase. If Stripe says portal not configured -> activate the Customer Portal
+  in Stripe TEST settings.]
 
-Current-plan card:
-- Title: `Your plan`
-- Line 1: `{Tier} — {term}` e.g. `Boat Pro Featured — 12 months`
-- Line 2 (active): `Renews automatically on {date}`
-- Line 2 (trialing): `Free trial — your first payment is on {date}`
-- Line 2 (cancel scheduled): `Cancels on {date} — you keep {Tier} until then`
-- Line 2 (downgrade scheduled): `Changes to {Lower tier} on {date}`
-- Line 2 (past_due): `We couldn't take your last payment. Update your card to keep {Tier}.`
-- Price line: `{price} every {term}`
+Step H - Cancel, then resume
+  Do: portal -> cancel at period end; back in app My plan shows "cancels on
+  <date>". Then resume.
+  Expect: customer.subscription.updated webhooks flip cancel_at_period_end on then
+  off; My plan reflects it. Where: My plan cancel_at_period_end; Stripe
+  subscription.
 
-Buttons / actions (exact labels):
-- `Upgrade` → subtext `Upgrade now — you're charged the prorated difference for the time left and keep your renewal date.`
-- `Change plan` (downgrade/term change) → subtext `Lower plans start at your next renewal. You're not charged now.`
-- `Cancel plan` → confirm body: `Cancel auto-renewal? You'll keep {Tier} until {date}, then move to the free plan. No further charges.` Confirm button `Cancel auto-renewal`, dismiss `Keep {Tier}`.
-- When cancel is scheduled, the Cancel button becomes `Resume auto-renewal` → toast `Auto-renewal is back on. Your plan renews on {date}.`
-- When a downgrade is scheduled: banner `Scheduled: changes to {Lower tier} on {date}.` with `Undo change` → toast `Kept on {Tier}.`
-- `Update payment method` / `Manage billing` → opens the Stripe Customer Portal.
-- Free account: `You're on the free plan.` + `See plans` button.
+Step I - Failed card
+  Do: easiest - a SECOND throwaway account, checkout, pay with 4000 0000 0000 0002
+  (or swap to the declining card in the portal and trigger the next invoice).
+  Expect: invoice.payment_failed webhook -> "payment didn't go through" email +
+  My plan "at risk / update your card"; access stays on during Stripe retries.
+  Where: Stripe invoice "failed"; app banner; Resend send.
 
-Toasts / states:
-- Upgrade success: `You're now on {Tier}. You were charged {amount} today.`
-- Signup success (paid): `Welcome to {Tier}! Your plan renews on {date}.`
-- Signup success (trial): `Your 30-day free trial has started. First payment on {date}.`
-- Payment failed banner (global): `Your payment didn't go through. Update your card to keep your plan.` + `Update card`.
+Cleanup: cancel/delete the throwaway subscription(s)/customer(s) in Stripe TEST and
+remove the throwaway account(s). Test data only; no live money.
 
-Copy rules: no em dashes (use hyphens), term "username" not "handle", and remove every "Renews / ends", "Buy more time", and "Plans stack…" string.
+================================================================================
+## 3) LIVE go-live runbook (each step: WHO / WHERE / VERIFY / ROLLBACK)
 
-Placement: web `frontend/src/pages/MyPlan.jsx` (route `/my-plan`); mobile `app/(tabs)/profile/my-plan.tsx`. Pricing pages lose the stacking note and show plain "auto-renews, cancel anytime".
+Order matters - do not flip live keys until catalog + webhook + portal are ready.
+"Agent" = me in the pod; "Jenn" = Stripe dashboard / secure card / Publish;
+"Emergent staff" = platform-only actions.
 
-## 9. Verification list
+G1. Freeze a known-good build
+  WHO: Jenn. WHERE: Emergent. VERIFY: test-mode flow (section 2) fully passed.
+  ROLLBACK: platform Rollback to this checkpoint.
 
-Test mode (sandbox; use test cards + a test clock to fast-forward renewals):
-1. New signup (paid) → `active`, entitlement + renewal date correct, Zoho CRM event, receipt.
-2. New signup (trial) → `trialing`, no charge, converts to `active` + charge at day 31 (advance test clock).
-3. Upgrade with credit → immediate tier change, invoice shows prorated charge + unused-time credit, renewal date preserved.
-4. Each downgrade (every higher→lower tier, and term changes) → zero charge now, schedule shows, applies at `current_period_end` (advance clock), lands on the lower tier.
-5. Cancel → `cancel_at_period_end`, tier kept to term end, lapses to free after (advance clock), no charge.
-6. Undo cancel / undo scheduled downgrade → back to normal auto-renew.
-7. Failed renewal → test card declines at renewal → `past_due` keeps access + banner → Smart Retry → recovers on card update, OR terminal → `canceled`/`unpaid` revokes.
-8. 90-day tester promo → 100% off for 3 cycles/months, single-use + expiry enforced, day-91 charge on file.
-9. Webhook idempotency + signature verification; entitlement matches Stripe after each event.
-10. Mobile deep-link return refreshes entitlement for signup/upgrade/cancel/portal.
+G2. Custom production domain (app.sailmorenow.com) + production backend URL/TLS
+  WHO: EMERGENT STAFF (platform). WHY staff-only: custom-domain mapping, TLS and
+  the production ingress are platform-managed; agent/Jenn cannot provision them,
+  and the LIVE webhook URL + APP_PUBLIC_URL depend on the final prod domain.
+  WHERE: Emergent platform. VERIFY: the prod URL serves the app and /api responds.
+  ROLLBACK: revert domain mapping (staff).
 
-Can only be tested with real money at the very end: a genuine live-mode card charge end-to-end, real bank decline/3DS behaviour, real payout, and real tax calculation. Everything else is coverable in sandbox/test.
+G3. Production environment values
+  WHO: Jenn via secure card (values), applied by Publish. WHERE: secure secrets
+  card "live" slot. Keys: STRIPE_API_KEY (sk_live_...), STRIPE_PUBLISHABLE_KEY
+  (pk_live_...), STRIPE_WEBHOOK_SECRET (LIVE whsec_, after G6), APP_PUBLIC_URL
+  (= prod domain). NOTE: test values update immediately in preview; LIVE values
+  reach production on the next Publish. VERIFY: after publish, GET
+  /api/payments/mode reflects live. ROLLBACK: blank/replace via the card +
+  republish, or platform Rollback.
 
-## 10. Effort, risks, conflicts
+G4. Publish to production
+  WHO: Jenn (Publish button). WHERE: Emergent. VERIFY: prod build live at the prod
+  domain. ROLLBACK: platform Rollback.
 
-**Effort (realistic phases):**
-- P1 Catalog + plumbing: create Products/Prices+lookup_keys, Customer creation, store `stripe_customer_id`, entitlement model + `provider` field. (M)
-- P2 Signup Checkout (`mode=subscription`) + webhook handlers as source of truth + entitlement reads replacing `promote_or_lapse`. (L)
-- P3 Upgrade (always_invoice + preview), Downgrade (subscription schedule), Cancel/Undo (`cancel_at_period_end`). (M)
-- P4 Customer Portal (card update/manage) + dunning/past_due access policy + banners. (M)
-- P5 Web + mobile Subscription UI with approved copy; remove queue/stacking/"buy more time" code + copy. (M)
-- P6 Mobile deep-link return (PaymentSheet or bridge) + post-pay refresh. (M)
-- P7 Zoho CRM subscription events. (S)
-- P8 Tester promo + Community Partner custom price + company tax/name fields. (M)
-- P9 Sandbox verification run (incl. test clock) against the §9 list. (M)
+G5. Run the Stripe catalog in LIVE mode
+  WHAT: setup_stripe.py creates 5 products + 17 prices with stable lookup_keys
+  (idempotent); uses STRIPE_SECRET_KEY / STRIPE_API_KEY from its environment.
+  WHO/WHERE: must run with the LIVE secret key in scope. Pick with Jenn:
+  (a) EMERGENT STAFF / agent run it ONCE in the PRODUCTION environment where the
+  live key lives; or (b) agent runs a controlled one-off with the live key
+  present. Preference: run in production so the live key never sits in preview.
+  FLAG: if the agent cannot get a prod shell, this needs Emergent staff (or a
+  platform job). VERIFY: Stripe LIVE -> Products shows 5 products + prices;
+  re-running makes no duplicates. ROLLBACK: archive the live products in Stripe
+  (safe before anyone subscribes).
 
-**Risks:** webhook/entitlement drift if a non-webhook path grants tiers; `past_due` grace vs instant revoke policy; proration surprises on upgrade (credit > charge → balance credit, not refund); term-as-interval modelling (6-month = month×6) must be right or renewal dates skew; mobile scheme mismatch between Expo Go and builds; promo/trial mutual exclusivity; one-Customer-per-account enforcement; Campaigns must stay OFF while CRM events flow.
+G6. Live webhook + signing secret
+  WHO: Jenn (Stripe LIVE) + secure card. WHERE: Stripe LIVE -> Developers ->
+  Webhooks -> Add endpoint = https://<prod-domain>/api/stripe/webhook with the
+  SAME six events. Copy the LIVE whsec_ into STRIPE_WEBHOOK_SECRET "live" slot via
+  the secure card; reaches prod on publish/restart. VERIFY: "Send test webhook" ->
+  200; a real test purchase (G9) writes db.stripe_events and updates My plan.
+  ROLLBACK: disable the live endpoint.
 
-**Conflicts with Jenn's decisions vs Stripe behaviour:**
-- "Paid at signup" + "30-day free trial" are mutually exclusive on day 1 — must choose (trial-first with card, or paid-now). (§5)
-- "90 days free" via coupon = `duration_in_months=3` ≈ 90 days, not exactly 90; exact-90 needs a `trial_end` timestamp instead. And a promo code can't ride on a trial-offer Checkout. (§6a, §5)
-- "Upgrade keeps the same end date" (today's RULE 2) — Stripe's `always_invoice` upgrade keeps the period end by default but the mental model is "credit + charge difference", not "end date frozen with no money math"; fine, just reworded.
-- "Cancel keeps tier until term ends" works via `cancel_at_period_end`, but for a 6/12-month term that means access until the far renewal date — confirm that's intended (no early cancellation/refund).
+G7. Live Customer Portal
+  WHO: Jenn (Stripe LIVE -> Settings -> Billing -> Customer portal -> Activate;
+  allow cancel + payment-method update + invoice history). VERIFY: Manage billing
+  from a live account opens the portal. ROLLBACK: reconfigure anytime.
 
-## Files read
-- backend: `routers/payments_router.py`, `routers/identity_router.py`, `deps.py` (promote_or_lapse, current_user_from_token), `plan_features.py`, `constants.py` (SUBSCRIPTION_PACKAGES + package_total).
-- frontend (web): `pages/MyPlan.jsx`, `pages/PaymentSuccess.jsx`, `pages/VerificationReturn.jsx`, `components/IdentityVerification.jsx`.
-- mobile: `app/(tabs)/profile/my-plan.tsx`, `app/pricing.tsx`, `app/payment/success.tsx`, `app/verify/return.tsx`, `app/(tabs)/profile/index.tsx` (identity start).
-- memory: `PRD.md` (Terms Checklist = the 11 rules, PLAN-QUEUE-1/PLAN-RULES-0 changelogs), `PLAN-RULES-0_REPORT.md`.
-- Stripe docs (current): prorations/always_invoice, subscription schedules + portal schedule_at_period_end, keys/sandboxes/go-live, customer portal, trials (trial_period_days, payment_method_collection, trial_settings.end_behavior), no-cost orders/coupons, promotion code restrictions, smart retries/dunning webhooks, mobile return (custom scheme, no universal links; RN PaymentSheet returnURL/handleURLCallback).
+G8. Retries + payment methods
+  WHO: Jenn (Stripe LIVE). WHERE: Settings -> Billing (Smart Retries / retry
+  schedule) and Settings -> Payment methods (enable cards; wallets/others only if
+  wanted). VERIFY: retry policy enabled; live Checkout shows intended methods.
+  ROLLBACK: revert settings (no data impact).
 
-## Could not verify
-- No live Stripe charge, real decline/3DS, payout, or real tax was run (plan only).
-- Whether the shared/sandbox account currently supports test clocks (needs a claimed sandbox to confirm).
-- Exact dunning retry schedule/final action — depends on the Dashboard settings of whichever account is claimed.
-- Mobile deep-link return not prototyped on a real device (web preview only here); PaymentSheet vs bridge to be confirmed on an actual build.
-- IAP-0 precedence rules (dual-provider) are stated as a requirement, not yet designed.
+G9. Real-money test on the CHEAPEST plan, then cancel + refund
+  WHO: Jenn (real card). WHERE: live app -> Premium $6.99/mo (sailor/owner). NOTE:
+  with the 30-day trial ON, a monthly checkout charges $0 today, which does NOT
+  exercise a real charge. To truly test a live charge either (i) temporarily set
+  the trial to 0 days (admin billing trial) for this one test, buy, verify the
+  $6.99 charge, refund, then restore 30; or (ii) start trialing then use the portal
+  to pay now / end trial. Recommend (i), single account. VERIFY: Stripe LIVE
+  Payments shows a real $6.99 charge; My plan = Premium active; one welcome email
+  to jenn@sailmorenow.com. Then CANCEL in the portal and REFUND in Stripe LIVE
+  (Payments -> Refund). VERIFY refund: Stripe shows refunded; subscription
+  canceled; My plan returns to free at period end. ROLLBACK: the refund fully
+  reverses the money; cancel reverses access.
+
+G10. Restore trial + final state
+  WHO: Agent/Jenn. Set admin billing trial back to 30 days ON if changed in G9.
+  VERIFY: GET /api/admin/billing/trial = {enabled:true, days:30}.
+
+Steps that CANNOT be done without Emergent staff, and why:
+  - G2 custom domain + prod backend URL/TLS: platform-managed ingress/DNS/cert;
+    neither agent nor Jenn can provision them, and the live webhook URL +
+    APP_PUBLIC_URL depend on the result.
+  - G5 live catalog run, IF the agent has no prod shell: the live secret must not
+    live in preview, so running setup_stripe.py in prod may require staff (or a
+    platform one-off job).
+  - Promotion of "live-slot" secret values into the running production env happens
+    via the platform Publish pipeline (not a manual .env edit).
+  All Stripe-dashboard actions (webhook, portal, retries, payment methods, refund)
+  are Jenn's - she owns the Stripe account; the agent has no dashboard access.
+
+================================================================================
+## 4) Risks and ordering (keep live exposure small) + "no test keys in prod" check
+
+Ordering to minimize exposure:
+  1. Fully pass test mode (section 2).
+  2. Catalog live (G5) BEFORE any live key is user-reachable, so prices exist.
+  3. Live webhook + portal + retries (G6-G8) BEFORE announcing.
+  4. Exactly ONE real-money test on the $6.99 plan (G9), then refund immediately.
+  5. Only then open signups / announce.
+
+Risks:
+  - Wrong/stale webhook secret -> events 400, My plan silent. Mitigation: "Send
+    test webhook" + db.stripe_events check.
+  - Trial hides a real charge (G9) -> you think live charging works when it was $0.
+    Mitigation: the trial-off-for-one-test approach in G9.
+  - Duplicate catalog prices if lookup_keys change -> setup_stripe.py is idempotent
+    by lookup_key; do NOT rename keys.
+  - Double entitlement sources -> handled: webhook is source of truth + /status
+    reconcile + idempotent stripe_events.
+  - Live welcome/payment email to a real inbox during testing -> restrict test
+    accounts to jenn@sailmorenow.com.
+
+Confirm NO test keys remain in production (all read-only):
+  - After publish, in PRODUCTION confirm STRIPE_API_KEY / STRIPE_PUBLISHABLE_KEY
+    start with sk_live_ / pk_live_ (never sk_test_ / pk_test_), and
+    STRIPE_WEBHOOK_SECRET is the LIVE endpoint's whsec_.
+  - GET /api/payments/mode in prod reports live.
+  - Stripe LIVE dashboard (not Test) shows the products, the prod webhook endpoint,
+    and the real $6.99 charge/refund.
+  - Spot-check: a live Checkout URL is checkout.stripe.com with no "test mode"
+    banner. Confirm via the secure-card list that the live slots are populated.
+
+================================================================================
+## 5) Free-tier check (does billing/matrix/trial still work after FREE-TIER-BUILD-1?)
+
+- Billing endpoints: UNAFFECTED. FREE-TIER-BUILD-1 changed only posting/comment/
+  react gates (require_participation) and copy; it did not touch
+  payments_router.py, billing.py, SUBSCRIPTION_PACKAGES, setup_stripe.py or the
+  webhook. Checkout/portal/entitlement unchanged.
+- Checkout eligibility: still requires tier == free to start a NEW subscription
+  (billing.py:110-122). Free individuals who can now post are still "free" for
+  billing, so they remain eligible to start the trial - correct.
+- Plan matrix: post_comment_react flipped to free:Y and org feed rows reworded
+  (FREE-TIER-BUILD-1); scripts/check_plan_copy.py passes. The matrix still drives
+  Pricing / My plan / PlanComparison. No billing fields changed.
+- Trial logic: default 30 days, enabled (billing.py:25-26); checkout applies
+  trial_period_days=30 for any eligible free user on the chosen MONTHLY package
+  (payments_router.py:198-212). All monthly packages are the 1-month entries
+  (sailor_premium_1, owner_premium_1, pro_basic_1, pro_featured_1, pro_premium_1),
+  and the UI starts checkout on the 1-month package, so the 30-day trial applies to
+  EVERY monthly plan. Multi-month terms are chosen later via the term-change path,
+  which replaces the trial (by design).
+- VERIFY (test mode, read-only): GET /api/payments/mode -> trial_days 30; GET
+  /api/payments/packages as a fresh free account -> each monthly package row shows
+  trial_eligible:true. Section 2 Step B/C then confirms a trialing subscription
+  with a ~30-day free window.
+
+================================================================================
+## 6) Questions for Jenn (not assumed)
+- Q1 Prod domain: is the live backend served from https://app.sailmorenow.com, or
+  will the production URL differ (it sets both the live webhook URL and
+  APP_PUBLIC_URL)? If a custom domain, that is the Emergent-staff step G2.
+- Q2 Welcome-email recipient for testing: OK to run every test purchase on an
+  account whose email is jenn@sailmorenow.com (or a +tag to it) so no real customer
+  is emailed?
+- Q3 Real-money live test (G9): OK to temporarily set the trial to 0 days for a
+  single $6.99 charge so we actually exercise a live payment, then refund and set
+  it back to 30? Or prefer the portal "pay now" variant?
+- Q4 Who runs the live catalog (G5)? Can you grant the agent a run in the
+  production environment, or should this be an Emergent-staff one-off so the live
+  key never touches preview?
+- Q5 Payment methods (G8): cards only at launch, or also wallets (Apple/Google
+  Pay) / others?
+- Q6 Timing: keep the 30-day trial ON at launch for all monthly plans (current
+  default), or launch with it OFF / a different length?
+- Q7 Confirm your Stripe country/account supports the live Customer Portal and that
+  the destination currency is USD (prices are in USD today).
