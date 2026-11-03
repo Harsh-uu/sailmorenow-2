@@ -438,6 +438,95 @@ function DisputesTab() {
 }
 
 
+function ActivityTab() {
+  const [days, setDays] = useState(7);
+  const [minTotal, setMinTotal] = useState(10);
+  const [data, setData] = useState(null);
+
+  const load = () => {
+    setData(null);
+    api.get(`/admin/activity-volume?days=${days}&min_total=${minTotal}`)
+      .then(({ data }) => setData(data)).catch(() => setData({ rows: [] }));
+  };
+  useEffect(() => { const t = setTimeout(load, 300); return () => clearTimeout(t); }, [days, minTotal]); // eslint-disable-line
+
+  const toggleFlag = async (r) => {
+    try { await api.post(`/admin/users/${r.user_id}/flag-volume`, { flagged: !r.flagged }); toast.success(r.flagged ? "Flag removed" : "Flagged for review"); load(); }
+    catch (e) { toast.error(e?.response?.data?.detail || "Couldn't update"); }
+  };
+  const toggleBan = async (r) => {
+    const action = r.banned ? "unban" : "ban";
+    if (!window.confirm(`${r.banned ? "Reactivate" : "Deactivate"} ${r.name || r.email || "this account"}?`)) return;
+    try { await api.post(`/admin/users/${r.user_id}/${action}`); toast.success(r.banned ? "Account reactivated" : "Account deactivated"); load(); }
+    catch (e) { toast.error(e?.response?.data?.detail || "Couldn't update"); }
+  };
+
+  const DAYS = [[7, "7 days"], [14, "14 days"], [30, "30 days"]];
+  const Count = ({ label, n }) => (
+    <span className="inline-flex items-baseline gap-1 rounded-lg bg-slate-50 border border-slate-100 px-2 py-1">
+      <span className="text-sm font-bold text-[#1F3F5B]">{n}</span>
+      <span className="text-[10px] uppercase tracking-wide text-slate-400">{label}</span>
+    </span>
+  );
+  const Tag = ({ children, cls }) => <span className={`text-[10px] font-bold uppercase px-1.5 py-0.5 rounded ${cls}`}>{children}</span>;
+
+  return (
+    <div className="mt-4" data-testid="activity-tab">
+      <p className="text-xs text-slate-500 mb-3 max-w-2xl">
+        Accounts posting, commenting or reacting at high volume in the window. This is for visibility only - it does not limit or block anyone. Review a row, then Flag it for follow-up or use Deactivate / content removal as needed.
+      </p>
+      <div className="flex flex-wrap items-center gap-2 mb-4">
+        {DAYS.map(([d, l]) => (
+          <button key={d} onClick={() => setDays(d)} data-testid={`activity-days-${d}`}
+                  className={`px-3 py-1.5 rounded-full text-xs font-bold border ${days === d ? "bg-[#1F3F5B] text-white border-[#1F3F5B]" : "bg-white border-slate-200 text-slate-600"}`}>{l}</button>
+        ))}
+        <label className="ml-1 text-xs text-slate-500 flex items-center gap-1.5">
+          Min activity
+          <input type="number" min={1} value={minTotal} data-testid="activity-min-total"
+                 onChange={(e) => setMinTotal(Math.max(1, parseInt(e.target.value || "1", 10)))}
+                 className="w-16 rounded-lg border border-slate-200 px-2 py-1 text-sm" />
+        </label>
+      </div>
+
+      {data === null ? <p className="text-slate-400">Loading…</p>
+        : !data.rows.length ? <p className="text-slate-500" data-testid="activity-empty">No accounts above {minTotal} actions in the last {days} days.</p>
+        : (
+          <div className="space-y-2" data-testid="activity-list">
+            {data.rows.map((r) => (
+              <div key={r.user_id} className="bg-white rounded-xl border border-slate-100 p-3" data-testid={`activity-row-${r.user_id}`}>
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div className="min-w-0 flex-1">
+                    <div className="text-sm font-semibold text-[#1F3F5B] truncate flex items-center gap-1.5 flex-wrap">
+                      {r.name || r.email || r.user_id}
+                      {r.is_new && <Tag cls="bg-amber-100 text-amber-800">New</Tag>}
+                      {r.is_free && <Tag cls="bg-slate-100 text-slate-600">Free</Tag>}
+                      {r.flagged && <Tag cls="bg-red-100 text-red-700">Flagged</Tag>}
+                      {r.banned && <Tag cls="bg-red-100 text-red-700">Deactivated</Tag>}
+                    </div>
+                    <div className="text-xs text-slate-500 truncate">{r.email} · @{r.handle || "-"} · {r.account_type || "-"} · {r.subscription_tier}</div>
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                      <Count label="total" n={r.total} />
+                      <Count label="posts" n={r.posts} />
+                      <Count label="comments" n={r.comments} />
+                      <Count label="reactions" n={r.reactions} />
+                      <Count label="hub" n={r.hub} />
+                    </div>
+                  </div>
+                  <div className="flex gap-2 flex-wrap">
+                    <button onClick={() => toggleFlag(r)} data-testid={`activity-flag-${r.user_id}`}
+                            className={`text-xs font-bold rounded-full px-3 py-1.5 border ${r.flagged ? "text-slate-600 border-slate-200 hover:bg-slate-50" : "text-amber-700 border-amber-200 hover:bg-amber-50"}`}>{r.flagged ? "Unflag" : "Flag"}</button>
+                    <button onClick={() => toggleBan(r)} data-testid={`activity-ban-${r.user_id}`}
+                            className={`text-xs font-bold rounded-full px-3 py-1.5 border ${r.banned ? "text-emerald-700 border-emerald-200 hover:bg-emerald-50" : "text-red-600 border-red-200 hover:bg-red-50"}`}>{r.banned ? "Reactivate" : "Deactivate"}</button>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+    </div>
+  );
+}
+
 export default function AdminModeration() {
   const { user, loading } = useAuth();
   const nav = useNavigate();
@@ -448,6 +537,7 @@ export default function AdminModeration() {
   const TABS = [
     { k: "audit", label: "Audit log" },
     { k: "users", label: "Members" },
+    { k: "activity", label: "High activity" },
     { k: "faqs", label: "FAQ" },
     { k: "testimonials", label: "Testimonials" },
     { k: "disputes", label: "Disputes" },
@@ -464,6 +554,7 @@ export default function AdminModeration() {
       </div>
       {tab === "audit" && <AuditTab />}
       {tab === "users" && <UsersTab />}
+      {tab === "activity" && <ActivityTab />}
       {tab === "faqs" && <FaqTab />}
       {tab === "testimonials" && <TestimonialsTab />}
       {tab === "disputes" && <DisputesTab />}

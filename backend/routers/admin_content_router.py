@@ -1,12 +1,12 @@
 """Admin moderation: edit/delete content across entity types, deactivate/ban
 profiles, and read the audit log. Every change is recorded in `audit_logs`."""
 from __future__ import annotations
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, Body, Depends, HTTPException
 
-from deps import db, require_admin
+from deps import db, require_admin, is_paid_subscriber
 from audit import log_admin_action
 
 router = APIRouter()
@@ -178,6 +178,96 @@ async def admin_unban_user(uid: str, admin=Depends(require_admin)):
     except Exception:
         pass
     return {"ok": True, "banned": False}
+
+
+# ---------- High-activity / spam-volume visibility ----------
+# Admin-only, read-only aggregation: which accounts post/comment/react/author hub
+# content at spam-like volume over a recent window. No enforcement, no hard limits -
+# this is VISIBILITY only, so admins can review and use the existing Deactivate,
+# Flag and content-delete actions. Free members' abilities are unchanged.
+@router.get("/admin/activity-volume")
+async def admin_activity_volume(days: int = 7, min_total: int = 10, new_days: int = 7,
+                                limit: int = 100, admin=Depends(require_admin)):
+    days = max(1, min(days, 90))
+    new_days = max(1, min(new_days, 90))
+    min_total = max(1, min(min_total, 10000))
+    limit = max(1, min(limit, 300))
+    now = datetime.now(timezone.utc)
+    cutoff = (now - timedelta(days=days)).isoformat()
+    new_cutoff = (now - timedelta(days=new_days)).isoformat()
+
+    async def tally(coll: str, author_field: str, time_field: str) -> Dict[str, int]:
+        out: Dict[str, int] = {}
+        async for r in db[coll].aggregate([
+            {"$match": {time_field: {"$gte": cutoff}, author_field: {"$ne": None}}},
+            {"$group": {"_id": f"${author_field}", "n": {"$sum": 1}}},
+        ]):
+            if r["_id"]:
+                out[r["_id"]] = r["n"]
+        return out
+
+    posts = await tally("posts", "author_id", "created_at")
+    comments = await tally("comments", "author_id", "created_at")
+    hub = await tally("discussions", "author_id", "created_at")
+    reactions = await tally("reactions", "user_id", "updated_at")  # reactions store updated_at
+
+    ids = set(posts) | set(comments) | set(hub) | set(reactions)
+    rows = []
+    for uid in ids:
+        p, c, h, rx = posts.get(uid, 0), comments.get(uid, 0), hub.get(uid, 0), reactions.get(uid, 0)
+        total = p + c + h + rx
+        if total < min_total:
+            continue
+        rows.append({"user_id": uid, "posts": p, "comments": c, "hub": h,
+                     "reactions": rx, "total": total})
+    rows.sort(key=lambda x: x["total"], reverse=True)
+    rows = rows[:limit]
+
+    uids = [r["user_id"] for r in rows]
+    users: Dict[str, Dict[str, Any]] = {}
+    if uids:
+        async for u in db.users.find({"user_id": {"$in": uids}}, {
+            "_id": 0, "user_id": 1, "name": 1, "email": 1, "handle": 1,
+            "account_type": 1, "subscription_tier": 1, "subscription_expires": 1,
+            "created_at": 1, "banned": 1, "flagged_high_volume": 1, "comped_until": 1,
+        }):
+            users[u["user_id"]] = u
+    for r in rows:
+        u = users.get(r["user_id"], {})
+        r["name"] = u.get("name")
+        r["email"] = u.get("email")
+        r["handle"] = u.get("handle")
+        r["account_type"] = u.get("account_type")
+        r["subscription_tier"] = u.get("subscription_tier") or "free"
+        r["created_at"] = u.get("created_at")
+        r["banned"] = bool(u.get("banned"))
+        r["flagged"] = bool(u.get("flagged_high_volume"))
+        r["is_free"] = not is_paid_subscriber(u) if u else True
+        r["is_new"] = bool(u.get("created_at") and str(u.get("created_at")) >= new_cutoff)
+    return {"window_days": days, "min_total": min_total, "new_days": new_days,
+            "count": len(rows), "rows": rows}
+
+
+@router.post("/admin/users/{uid}/flag-volume")
+async def admin_flag_volume(uid: str, body: Dict[str, Any] = Body(default={}),
+                            admin=Depends(require_admin)):
+    """Soft triage flag only - marks an account for admin review. It does NOT
+    block, throttle or change anything the member can do."""
+    user = await db.users.find_one({"user_id": uid}, {"_id": 0, "name": 1, "email": 1})
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    flagged = bool(body.get("flagged", True))
+    if flagged:
+        await db.users.update_one({"user_id": uid}, {"$set": {
+            "flagged_high_volume": True,
+            "flagged_high_volume_at": datetime.now(timezone.utc).isoformat()}})
+    else:
+        await db.users.update_one({"user_id": uid}, {
+            "$set": {"flagged_high_volume": False},
+            "$unset": {"flagged_high_volume_at": ""}})
+    label = (user.get("name") or user.get("email") or uid) + " - high volume"
+    await log_admin_action(admin, "flag" if flagged else "unflag", "profile", uid, summary=label)
+    return {"ok": True, "flagged": flagged}
 
 
 # ---------- Audit log ----------
