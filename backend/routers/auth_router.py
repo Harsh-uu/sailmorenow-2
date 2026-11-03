@@ -377,6 +377,44 @@ async def send_verification(request: Request,
     return {"ok": True, "hours_remaining": verification_state(user).get("hours_remaining")}
 
 
+def _mask_email(email: Optional[str]) -> str:
+    """j***@domain.com - enough to recognize your own address, not to reveal it."""
+    email = (email or "").strip()
+    if "@" not in email:
+        return "your email"
+    local, _, domain = email.partition("@")
+    masked_local = (local[0] + "***") if local else "***"
+    return f"{masked_local}@{domain}"
+
+
+@router.post("/auth/verify-email/peek")
+async def verify_email_peek(body: Dict[str, Any]):
+    """Read-only: identify which account a verification link belongs to WITHOUT
+    consuming the token. The page calls this first so it can compare the link's
+    account to the signed-in account before doing the real (single-use)
+    verification. Takes no session and changes nothing."""
+    token = (body.get("token") or "").strip()
+    if not token:
+        return {"valid": False, "reason": "invalid"}
+    rec = await db.email_verifications.find_one({"token": token})
+    if not rec:
+        return {"valid": False, "reason": "invalid"}
+    user = await db.users.find_one({"user_id": rec["user_id"]}, {"_id": 0, "email": 1, "email_verified": 1})
+    if user and user.get("email_verified"):
+        return {"valid": True, "already_verified": True, "user_id": rec["user_id"],
+                "email_masked": _mask_email(user.get("email"))}
+    exp = rec.get("expires_at")
+    try:
+        if exp and exp.tzinfo is None:
+            exp = exp.replace(tzinfo=timezone.utc)
+    except AttributeError:
+        exp = None
+    if rec.get("used") or (exp and datetime.now(timezone.utc) > exp):
+        return {"valid": False, "reason": "expired"}
+    return {"valid": True, "already_verified": False, "user_id": rec["user_id"],
+            "email_masked": _mask_email(user.get("email") if user else None)}
+
+
 @router.post("/auth/verify-email")
 async def verify_email(body: Dict[str, Any]):
     """Consume a verification token. No auth required (the token is the proof), so
@@ -388,8 +426,9 @@ async def verify_email(body: Dict[str, Any]):
     if not rec:
         raise HTTPException(status_code=400, detail="This verification link is invalid.")
     user = await db.users.find_one({"user_id": rec["user_id"]}, {"_id": 0, "email": 1, "email_verified": 1})
+    masked = _mask_email(user.get("email") if user else None)
     if user and (user.get("email_verified")):
-        return {"ok": True, "already_verified": True}
+        return {"ok": True, "already_verified": True, "user_id": rec["user_id"], "email_masked": masked}
     exp = rec.get("expires_at")
     try:
         if exp and exp.tzinfo is None:
@@ -402,7 +441,7 @@ async def verify_email(body: Dict[str, Any]):
                               {"$set": {"email_verified": True,
                                         "email_verified_at": datetime.now(timezone.utc).isoformat()}})
     await db.email_verifications.update_one({"token": token}, {"$set": {"used": True}})
-    return {"ok": True}
+    return {"ok": True, "user_id": rec["user_id"], "email_masked": masked}
 
 
 @router.post("/auth/change-email")
