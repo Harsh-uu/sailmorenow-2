@@ -39,6 +39,11 @@ SURFACES = [
     # backend static copy (FAQ answers, welcome/lapse emails)
     "backend/routers/content_router.py",
     "backend/mailer.py",
+    # welcome email templates
+    "backend/email_templates/welcome-sailor.html",
+    "backend/email_templates/welcome-boat-owner.html",
+    "backend/email_templates/welcome-boat-pro.html",
+    "backend/email_templates/welcome-club-org.html",
 ]
 
 # Phrases that must NOT appear anywhere (old wording Jenn retired).
@@ -56,7 +61,19 @@ BANNED = [
     "1 update each calendar month",
     # Wrong Boat Pro entry price (Basic is $12.99, not $19.99).
     "boat pros from $19.99",
+    # EMAIL-WORDING-FIX-1: welcome emails no longer list posting as plan-gated.
+    "like posting, reviews, and direct messages",
 ]
+
+# Per-surface exceptions: a banned phrase that is intentionally KEPT in a specific
+# file. welcome-club-org keeps "posting" because org posting IS plan-limited
+# (1 post / month free vs unlimited for Community Partners), so the phrase is
+# correct there and Jenn chose to leave it unchanged.
+BANNED_EXCEPTIONS = {
+    "backend/email_templates/welcome-club-org.html": {
+        "like posting, reviews, and direct messages",
+    },
+}
 
 PRICE_RE = re.compile(r"\$(\d{1,3}(?:,\d{3})*\.\d{2})\b")
 EMDASH_RE = re.compile(r"\u2014|&mdash;")
@@ -107,8 +124,9 @@ def main():
             continue
         for i, line in enumerate(f.read_text(encoding="utf-8").splitlines(), 1):
             low = line.lower()
+            allowed_here = BANNED_EXCEPTIONS.get(rel, set())
             for b in BANNED:
-                if b in low:
+                if b in low and b not in allowed_here:
                     problems.append(f"{rel}:{i}: banned phrase '{b}'")
             if EMDASH_RE.search(line) and PLAN_CONTEXT.search(line):
                 problems.append(f"{rel}:{i}: em dash in plan copy (use a hyphen)")
