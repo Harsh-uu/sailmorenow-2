@@ -340,3 +340,140 @@ Confirm NO test keys remain in production (all read-only):
   default), or launch with it OFF / a different length?
 - Q7 Confirm your Stripe country/account supports the live Customer Portal and that
   the destination currency is USD (prices are in USD today).
+
+================================================================================
+## 7) Jenn's decisions (RESOLVED) and refinements
+- Q1 Prod domain: app.sailmorenow.com (confirmed). Live webhook =
+  https://app.sailmorenow.com/api/stripe/webhook ; APP_PUBLIC_URL / APP_BASE_URL
+  must be https://app.sailmorenow.com in production.
+- Q2 Test-email recipient: jenn@sailmorenow.com ONLY for every test purchase.
+- Q3 Real live charge: Jenn briefly turns the trial OFF (admin trial toggle),
+  makes ONE real $6.99 purchase on the cheapest monthly plan, cancels, refunds in
+  Stripe, then turns the trial BACK ON. Refines G9/G10 below.
+- Q5 Payment methods: cards, Apple Pay and Google Pay at launch (see note).
+- Q6 Trial at launch: ON, 30 days, every monthly plan.
+- Q7 Country/currency: US and USD.
+
+G9 refined - real-money test (WHO: Jenn):
+  1. Admin -> billing trial toggle -> set trial OFF (0 days / disabled).
+     VERIFY: GET /api/admin/billing/trial shows trial_enabled:false.
+  2. Buy Premium $6.99/mo (sailor/owner) with a real card on app.sailmorenow.com.
+     VERIFY: Stripe LIVE Payments shows a real $6.99 charge; My plan = Premium
+     active; one welcome email to jenn@sailmorenow.com.
+  3. Cancel in the Customer Portal; REFUND the charge in Stripe LIVE
+     (Payments -> the charge -> Refund). VERIFY: Stripe shows refunded;
+     subscription canceled; My plan returns to free at period end.
+
+G10 refined - TURN THE TRIAL BACK ON (explicit final step, WHO: Jenn/agent):
+  1. Admin -> billing trial toggle -> set trial ON, 30 days.
+  2. VERIFY (required): GET /api/admin/billing/trial returns
+     {"trial_enabled": true, "trial_days": 30}. Do not consider go-live done until
+     this check passes.
+  WHY THIS MATTERS - what a real user sees if the trial is left OFF by mistake:
+  every new Premium signup would be CHARGED $6.99 IMMEDIATELY at checkout instead
+  of getting the advertised "30 days free". Stripe Checkout would show "$6.99 due
+  today" (no trial line), the card is billed on day 0, and the welcome email /
+  My plan would show an active paid plan with no free-until date. That contradicts
+  the pricing pages (which promise a 30-day trial) and would likely cause refunds
+  and complaints. So G10 + its verification are mandatory.
+
+Payment methods note (Apple Pay / Google Pay with card-only code):
+  The app uses Stripe-HOSTED Checkout (stripe.checkout.Session.create, mode
+  subscription). Apple Pay and Google Pay ride on the existing "card" payment
+  method and render AUTOMATICALLY on Stripe-hosted Checkout for supported
+  devices/browsers - NO code change is needed. To enable at launch, Jenn only
+  needs, in Stripe LIVE -> Settings -> Payment methods: cards ON and wallets
+  (Apple Pay, Google Pay) ON. For Stripe-hosted Checkout, Stripe auto-registers
+  the Apple Pay domain, so no manual domain file is required. VERIFY: a live
+  Checkout on an iPhone (Safari) shows the Apple Pay button; Chrome/Android shows
+  Google Pay. No preview test is meaningful here (needs live + real device).
+
+Country/currency check (Q7 - what to confirm in Stripe):
+  - Stripe Dashboard -> Settings -> Business / Account details: Country = United
+    States.
+  - Settings -> Payments / Currencies: default/presentment currency includes USD
+    (our prices are USD in constants.py).
+  - Settings -> Payouts: a US bank account is connected (required to receive live
+    funds).
+  - The account is in LIVE (activated) status, not just test. If the Stripe
+    account country is not US, the Customer Portal and payouts behave differently -
+    flag before go-live.
+
+Item 4 (live catalog) - what Jenn can do herself vs what needs the agent/Emergent,
+WITHOUT putting the live key in preview:
+  - Jenn herself (Stripe LIVE dashboard, no shell needed): webhook endpoint +
+    signing secret, Customer Portal activation, Revenue Recovery retries, Payment
+    methods, the real-money test, cancel and refund, and reading
+    products/prices. These are all dashboard actions.
+  - Jenn CANNOT run setup_stripe.py herself (it is a server script, not a dashboard
+    action). The catalog (5 products + 17 prices + lookup_keys) is created by that
+    script with the LIVE secret key.
+  - To avoid the live key ever touching preview, the catalog script must run in the
+    PRODUCTION environment (where the live key lives), executed by the AGENT if it
+    has a prod shell, otherwise by EMERGENT STAFF / a platform job. This is the one
+    billing step that is not Jenn-self-serve and not safe to run in preview.
+  - Not recommended: manually creating the 17 prices in the Stripe dashboard. It
+    works only if each price's lookup_key EXACTLY matches constants
+    (sailor_premium_1, pro_basic_6, etc.); a typo silently breaks checkout. Prefer
+    the script.
+
+================================================================================
+## 8) "Will I need to redo everything once the app is published?"
+Short answer: NO, not everything. Your CODE, the scheduler, the price/lookup-key
+DESIGN, and your (account-level) Resend sending domain carry over. BUT the entire
+Stripe LIVE side (webhook, portal, retries, payment methods, catalog) must be set
+up fresh in LIVE mode, because Stripe TEST and LIVE are completely separate - test
+configuration never appears in live. And production ENV values must be confirmed
+present. Per item:
+
+(a) Stripe webhook endpoint + signing secret -> REDO IN STRIPE LIVE. Add a new live
+    endpoint at https://app.sailmorenow.com/api/stripe/webhook and put the LIVE
+    whsec_ in the live secret slot. Test endpoint/secret do not carry.
+(b) Customer Portal configuration -> REDO IN STRIPE LIVE (test and live portal
+    settings are separate).
+(c) Revenue Recovery / retries window -> REDO IN STRIPE LIVE (separate from test).
+(d) Payment methods setting (cards + Apple/Google Pay) -> REDO IN STRIPE LIVE
+    (enable in the live account). No code change.
+(e) Products, prices, lookup keys -> REDO IN STRIPE LIVE: run setup_stripe.py with
+    the live key (creates the live catalog). The lookup_keys are identical, so NO
+    code change - only the live products/prices must be created once.
+(f) Environment values (APP_BASE_URL, APP_PUBLIC_URL, mail settings,
+    RESEND_API_KEY, admin notify / ADMIN_EMAILS, trial settings) -> MUST BE
+    CONFIRMED FOR PRODUCTION. Env values are per-environment: set APP_BASE_URL /
+    APP_PUBLIC_URL to https://app.sailmorenow.com and ensure RESEND_API_KEY,
+    EMAIL_FROM_NAME, EMAIL_LOGO_URL, ADMIN_EMAILS exist in the prod/live slots.
+    NOTE: trial settings live in the DATABASE (app_settings key "billing") with env
+    defaults of ON/30 - so even a fresh prod DB defaults to trial ON, 30 days
+    (which is what you want). Confirm via GET /api/admin/billing/trial after
+    publish.
+(g) Database contents + test accounts -> CANNOT VERIFY whether production uses the
+    SAME database as preview or a FRESH one. [MARKED: confirm with Emergent.]
+    Important regardless: any Stripe customers/subscriptions created in TEST mode
+    are NOT valid in live (test subscription ids do not exist in live Stripe), so
+    production billing should start clean. Recommend confirming with Emergent and
+    planning for clean billing data in prod.
+(h) Uploaded photos + object storage -> CANNOT VERIFY whether prod uses the same
+    object store/bucket as preview. If Emergent object storage is project-scoped
+    it likely carries; if environment-scoped, image URLs could break. [MARKED:
+    confirm with Emergent.]
+(i) Admin account + Google login -> Admin is DB-authoritative and is
+    created/promoted from ADMIN_EMAILS on backend startup (server.py:119-146), so
+    it CARRIES if prod shares the DB, and is otherwise RE-SEEDED automatically on
+    first prod boot as long as ADMIN_EMAILS is set in prod. Google login is the
+    Emergent-managed integration and carries via its managed config. VERIFY: set
+    ADMIN_EMAILS in prod and confirm you can sign in as admin after publish.
+(j) Scheduled jobs + scraper -> the scheduler runs inside the backend process, so
+    it CARRIES AUTOMATICALLY with the deployed code. Any external keys the scraper
+    / integrations need (e.g. Zoho keys already in env) must be present in the prod
+    slots. [MARKED: scraper specifics partial-verify - confirm which external
+    service it uses and that its keys are set in prod.]
+(k) Email sending domain + logo URL -> the verified SENDING DOMAIN lives in your
+    Resend ACCOUNT (account-level), so it CARRIES. The logo URL is driven by
+    EMAIL_LOGO_URL / APP_PUBLIC_URL, which must point to the prod domain. VERIFY:
+    EMAIL_LOGO_URL resolves on app.sailmorenow.com and a prod test email renders
+    the logo.
+
+Cannot-verify items to confirm with Emergent before launch: (g) DB carryover,
+(h) object-storage carryover, and the (j) scraper's external dependency. Everything
+in (a)-(e) is a deliberate LIVE-mode redo (expected, because Stripe separates test
+and live); (f), (i), (k) are "confirm the prod env/account values", not rebuilds.
