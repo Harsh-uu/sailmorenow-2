@@ -477,3 +477,46 @@ Cannot-verify items to confirm with Emergent before launch: (g) DB carryover,
 (h) object-storage carryover, and the (j) scraper's external dependency. Everything
 in (a)-(e) is a deliberate LIVE-mode redo (expected, because Stripe separates test
 and live); (f), (i), (k) are "confirm the prod env/account values", not rebuilds.
+
+
+---
+
+## 4) TIME-SENSITIVE (STRIPE-EXPIRY-CHECK-1) - claimable-key expiry + identity pause vs Nov 3 launch
+
+Corrected ownership: the sandbox (acct ending 1jyH, "Sail More Now Oct 12 2pm") is
+JENN'S OWN account via Emergent Payments Flow A (claimable sandbox). Keys are
+Emergent-managed/read-only; the ACCOUNT is hers. (Supersedes any "Emergent's account /
+BYOK migration" wording elsewhere.)
+
+Current state: sandbox CLAIMED (ownership done) but NOT fully activated - PAUSED for a
+past-due representative identity task that Jenn submitted and is under Stripe review.
+Her manual test webhook endpoint was deleted (fine - the app uses the Emergent-managed
+webhook). Her MAIN business Stripe account has no outstanding requirements.
+
+UNSAFE / TIME-SENSITIVE:
+- The Stripe dashboard shows a "claimable sandbox" key expiring in ~4 days (the
+  claim-window credential, not the 60-day sandbox TTL). That window lands ~Nov 3-4,
+  right at the Nov 3 EVENING web launch. RESOLVE BEFORE Nov 3 DAYTIME so a key expiry
+  cannot coincide with go-live.
+- At expiry the sandbox data (5 products, 17 prices, coupon SMNTEST3FREE, managed
+  webhook, 1,757 events) SURVIVES (it is in her account). The RISK is the app's
+  STRIPE_SECRET_KEY: if it still holds the expiring claimable key, test payments break
+  at expiry; if Emergent has rotated it to the full-access key, the app is fine.
+  ACTION: confirm the app's key is the full-access (claimed) key, not the expiring one
+  - if test payments start failing, Emergent must re-fetch the managed key
+  (reconnect/re-link in the Payments tab). [Emergent-side.]
+- Finishing the identity review is the gating item: it stops the TTL clock, finalizes
+  the claim, and is likely a prerequisite for Go live on the account being taken live.
+  Treat the review outcome as a launch dependency. [Jenn submitted; Stripe reviewing.]
+- Do NOT click "Remove" on the Payments tab (reconnect mints a NEW EMPTY sandbox =
+  rebuild catalog) and do NOT click "Go to Stripe / Take payments live" on launch
+  evening (it republishes the site). Do those deliberately, not under launch pressure.
+
+If the Nov 3 launch takes REAL money: test mode is not enough. Also complete Go live
+(install the Emergent Payments app in the LIVE account + publish), run setup_stripe.py
+against the live key (G5), and activate the live Customer Portal (G7). The expiring
+TEST key does not deliver a live launch by itself.
+
+Sources: docs.stripe.com/sandboxes/claimable-sandboxes (60-day TTL, 7-day claim-link,
+status-reaches-live stops TTL); Emergent Payments Flow A playbook;
+STRIPE-EXPIRY-CHECK-1_REPORT.md.

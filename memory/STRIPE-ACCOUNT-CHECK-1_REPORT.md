@@ -1,3 +1,17 @@
+> CORRECTION (STRIPE-EXPIRY-CHECK-1, later): The core premise below is WRONG. The
+> sandbox (acct ending 1jyH, "Sail More Now Oct 12 2pm") is JENN'S OWN Stripe account
+> with her correct business info - NOT an Emergent-owned or shared account. What is
+> Emergent-managed is only the KEYS (read-only secrets card), because this is Emergent
+> Payments Flow A (a CLAIMABLE sandbox). So: account = Jenn's; key delivery =
+> Emergent-managed. The right path to "use her own account" is to CLAIM the sandbox
+> (already in progress), NOT to unlink + paste keys (BYOK). Sections 2-5 below, which
+> assume a "different/other" account and a BYOK migration, are superseded - there is
+> no second account to migrate to; it is already hers. See
+> STRIPE-CLAIM-VS-REMOVE-1_REPORT.md and STRIPE-EXPIRY-CHECK-1_REPORT.md. The verified
+> account id, key prefixes, setup_stripe idempotency, stored-id list, and the
+> webhook/api-version analysis remain accurate.
+
+
 # STRIPE-ACCOUNT-CHECK-1 - Is this Jenn's Stripe account? What changes if she connects her own?
 READ-ONLY. Nothing changed, no secrets entered, no purchases. Hyphens only.
 Only non-secret values shown (account id + first 8 chars of key prefixes).
@@ -10,12 +24,14 @@ Only non-secret values shown (account id + first 8 chars of key prefixes).
 - STRIPE_PUBLISHABLE_KEY: prefix pk_test_
 - STRIPE_WEBHOOK_SECRET: prefix whsec_Pv
 - STRIPE_API_VERSION: unset (code uses its default pin, see 6)
-This IS an Emergent-managed TEST sandbox, not Jenn's account. VERIFIED: in the
-secrets list STRIPE_ACCOUNT_ID, STRIPE_MODE, STRIPE_PUBLISHABLE_KEY,
-STRIPE_SECRET_KEY and STRIPE_WEBHOOK_SECRET all carry "managed":"stripe_sandbox",
-and the card is read-only ("Keys are auto-fetched from Stripe"). The sk_test_
-prefix plus the managed tag confirm a managed sandbox. Jenn's observation that the
-business name/address are not hers is consistent with a shared Emergent sandbox.
+[CORRECTED] This is JENN'S OWN claimable sandbox (acct ending 1jyH, "Sail More Now
+Oct 12 2pm"), with her correct business info - NOT an Emergent-owned/shared account.
+What the secrets metadata shows (STRIPE_ACCOUNT_ID, STRIPE_MODE, STRIPE_PUBLISHABLE_KEY,
+STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET carry "managed":"stripe_sandbox" and the card
+is read-only "Keys are auto-fetched from Stripe") means only that the KEYS are
+Emergent-managed under Flow A - it does NOT mean the account is Emergent's. The earlier
+"business name/address are not hers" observation was a mistaken read; the account is
+hers. See the top banner and STRIPE-EXPIRY-CHECK-1_REPORT.md.
 
 ## (2) What connecting HER OWN account (Payments tab / BYOK) changes - INFERRED
 (platform behavior, inferred from the secrets slot metadata + the managed-key note;

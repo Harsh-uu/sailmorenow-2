@@ -1,3 +1,13 @@
+> CORRECTION (STRIPE-EXPIRY-CHECK-1, later): The "migrate to a different (Jenn's own)
+> Stripe account" premise of this file is RETRACTED. The sandbox is ALREADY Jenn's own
+> account (claimable sandbox acct ending 1jyH, "Sail More Now Oct 12 2pm"). There is no
+> second account to switch to, so the catalog does NOT need rebuilding and test users
+> do NOT need re-linking for an account move. The inventory below stays valid and
+> useful: the catalog (5 products, 17 price lookup_keys), the Stripe-id DB fields with
+> live counts, and the secret names. Only the section (4) "steps to rebuild in a
+> different account" is moot. See STRIPE-EXPIRY-CHECK-1_REPORT.md.
+
+
 # STRIPE-SNAPSHOT-1 - Pre-migration snapshot of the Stripe setup
 
 READ-ONLY capture taken before any Stripe account change. No code, secrets, or

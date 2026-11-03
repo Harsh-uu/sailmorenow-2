@@ -1,3 +1,11 @@
+> UPDATE (STRIPE-EXPIRY-CHECK-1, later): The claim is no longer hypothetical. Jenn has
+> CLAIMED this sandbox into her own Stripe account (acct ending 1jyH, "Sail More Now
+> Oct 12 2pm"); ownership is done, but full activation is PENDING a representative
+> identity review (sandbox currently paused), and the claimable key shows "expires in
+> ~4 days". The claim-vs-Remove-vs-Go-live analysis below still holds. Time-sensitive
+> launch detail is in STRIPE-EXPIRY-CHECK-1_REPORT.md and BILLING-PLAN-1 section 4.
+
+
 # STRIPE-CLAIM-VS-REMOVE-1_REPORT - Claim vs Remove vs Go-live on the Emergent Payments tab
 
 READ-ONLY. Nothing changed, no secrets entered, no buttons clicked, no purchases.
