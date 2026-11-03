@@ -493,18 +493,23 @@ past-due representative identity task that Jenn submitted and is under Stripe re
 Her manual test webhook endpoint was deleted (fine - the app uses the Emergent-managed
 webhook). Her MAIN business Stripe account has no outstanding requirements.
 
-UNSAFE / TIME-SENSITIVE:
-- The Stripe dashboard shows a "claimable sandbox" key expiring in ~4 days (the
-  claim-window credential, not the 60-day sandbox TTL). That window lands ~Nov 3-4,
-  right at the Nov 3 EVENING web launch. RESOLVE BEFORE Nov 3 DAYTIME so a key expiry
-  cannot coincide with go-live.
-- At expiry the sandbox data (5 products, 17 prices, coupon SMNTEST3FREE, managed
-  webhook, 1,757 events) SURVIVES (it is in her account). The RISK is the app's
-  STRIPE_SECRET_KEY: if it still holds the expiring claimable key, test payments break
-  at expiry; if Emergent has rotated it to the full-access key, the app is fine.
-  ACTION: confirm the app's key is the full-access (claimed) key, not the expiring one
-  - if test payments start failing, Emergent must re-fetch the managed key
-  (reconnect/re-link in the Payments tab). [Emergent-side.]
+KEY-SOURCE RESOLVED (STRIPE-EXPIRY-CHECK-1, Nov 3): the app's STRIPE_SECRET_KEY is the
+FULL-ACCESS "Secret key" (sk_test_, ends 04SP, created Oct 29, last used Nov 2) - NOT
+the expiring "Claimable sandbox key" (Agent/Limited permissions, never used, created
+Oct 30, expires in ~4 days). So the claimable-key expiry does NOT break the app's test
+payments, and nothing in the code depends on the claimable key (the claimable key shows
+"never used"). The managed webhook is likewise unaffected.
+
+DATE CORRECTION: "expires in about 4 days" as of Nov 3 12am Pacific means roughly
+Nov 6-7, NOT the Nov 3 launch evening. So the expiry does NOT coincide with launch -
+earlier wording claiming Nov 3-4 / launch-evening overlap was wrong.
+
+REMAINING TIME-SENSITIVE (lower urgency now):
+- Sandbox data (5 products, 17 prices, coupon SMNTEST3FREE, managed webhook, 1,757
+  events) lives in Jenn's account and survives regardless.
+- The claimable key can simply be left to expire ~Nov 6-7 - it is unused; no action
+  needed to keep the app working. (If anyone were to delete the full-access Secret key,
+  THAT would break the app - do not revoke ...04SP.)
 - Finishing the identity review is the gating item: it stops the TTL clock, finalizes
   the claim, and is likely a prerequisite for Go live on the account being taken live.
   Treat the review outcome as a launch dependency. [Jenn submitted; Stripe reviewing.]
