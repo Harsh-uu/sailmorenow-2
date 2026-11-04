@@ -1,0 +1,23 @@
+{
+  "id": "evt_sub_updated",
+  "type": "customer.subscription.updated",
+  "api_version": "2026-09-30.endive",
+  "data": {
+    "object": {
+      "id": "sub_updated",
+      "object": "subscription",
+      "customer": "cus_doc",
+      "status": "active",
+      "cancel_at_period_end": false,
+      "metadata": { "user_id": "user_doc" },
+      "items": {
+        "data": [
+          {
+            "current_period_end": 1792000000,
+            "price": { "lookup_key": "sailor_premium_1" }
+          }
+        ]
+      }
+    }
+  }
+}

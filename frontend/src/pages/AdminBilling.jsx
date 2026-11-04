@@ -12,6 +12,8 @@ export default function AdminBilling() {
   const [days, setDays] = useState(30);
   const [loaded, setLoaded] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [syncing, setSyncing] = useState(false);
+  const [syncResult, setSyncResult] = useState(null);
 
   useEffect(() => {
     if (loading) return;
@@ -47,6 +49,19 @@ export default function AdminBilling() {
   }
 
   const toggle = () => save(!enabled, days);
+
+  const syncCatalog = async () => {
+    if (!window.confirm("Re-create any missing products, prices and the promo code in the live Stripe mode? This writes to Stripe and is safe to repeat.")) return;
+    setSyncing(true);
+    setSyncResult(null);
+    try {
+      const { data } = await api.post("/admin/billing/sync-catalog");
+      setSyncResult(data);
+      toast.success(`Catalog synced (${data.mode}): ${data.prices_created} created, ${data.prices_unchanged} already set`);
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || "Catalog sync failed");
+    } finally { setSyncing(false); }
+  };
 
   return (
     <div className="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-10" data-testid="admin-billing-page">
@@ -104,6 +119,30 @@ export default function AdminBilling() {
               When off, no trial wording appears anywhere and plans show normal pricing. Changes are logged.
             </p>
           </>
+        )}
+      </div>
+
+      <div className="mt-6 rounded-2xl border border-slate-100 bg-white p-6 shadow-sm" data-testid="admin-catalog-card">
+        <div className="flex items-center justify-between gap-4">
+          <div>
+            <div className="font-display font-bold text-[#1F3F5B] text-base">Stripe catalog</div>
+            <div className="text-sm text-slate-500 mt-0.5">Re-create any missing products, prices or the promo code in the live Stripe mode. Idempotent and safe to repeat - useful right after go live.</div>
+          </div>
+          <button
+            onClick={syncCatalog}
+            disabled={syncing}
+            data-testid="admin-sync-catalog"
+            className="inline-flex items-center gap-1.5 bg-[#2A7871] hover:bg-[#226158] disabled:opacity-50 text-white rounded-full px-5 py-2.5 text-sm font-semibold shrink-0"
+          >
+            <Icon name="refresh" tone="current" className="h-4 w-4" /> {syncing ? "Syncing…" : "Sync catalog"}
+          </button>
+        </div>
+        {syncResult && (
+          <div className="mt-4 rounded-xl bg-slate-50 border border-slate-100 p-4 text-sm text-slate-600" data-testid="admin-sync-result">
+            <div><span className="font-semibold text-[#1F3F5B]">Mode:</span> {syncResult.mode}</div>
+            <div><span className="font-semibold text-[#1F3F5B]">Prices:</span> {syncResult.prices_created} created, {syncResult.prices_unchanged} unchanged{syncResult.prices_updated ? `, ${syncResult.prices_updated} updated` : ""}</div>
+            <div><span className="font-semibold text-[#1F3F5B]">Promo:</span> {syncResult.promo_code} ({syncResult.promo_state})</div>
+          </div>
         )}
       </div>
     </div>

@@ -1,0 +1,17 @@
+{
+  "id": "evt_inv_failed",
+  "type": "invoice.payment_failed",
+  "api_version": "2026-09-30.endive",
+  "data": {
+    "object": {
+      "id": "in_failed",
+      "object": "invoice",
+      "customer": "cus_doc",
+      "hosted_invoice_url": "https://pay.stripe.com/invoice/failed",
+      "parent": {
+        "type": "subscription_details",
+        "subscription_details": { "subscription": "sub_failed" }
+      }
+    }
+  }
+}

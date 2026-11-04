@@ -1,0 +1,14 @@
+{
+  "id": "evt_checkout_completed",
+  "type": "checkout.session.completed",
+  "api_version": "2026-09-30.endive",
+  "data": {
+    "object": {
+      "id": "cs_1",
+      "object": "checkout.session",
+      "customer": "cus_doc",
+      "subscription": "sub_checkout",
+      "status": "complete"
+    }
+  }
+}

@@ -1,0 +1,30 @@
+{
+  "id": "evt_inv_paid_endive",
+  "type": "invoice.paid",
+  "api_version": "2026-09-30.endive",
+  "data": {
+    "object": {
+      "id": "in_endive",
+      "object": "invoice",
+      "customer": "cus_doc",
+      "hosted_invoice_url": "https://pay.stripe.com/invoice/endive",
+      "parent": {
+        "type": "subscription_details",
+        "subscription_details": { "subscription": "sub_endive" }
+      },
+      "lines": {
+        "data": [
+          {
+            "parent": {
+              "type": "subscription_item_details",
+              "subscription_item_details": {
+                "subscription": "sub_endive",
+                "subscription_item": "si_endive"
+              }
+            }
+          }
+        ]
+      }
+    }
+  }
+}

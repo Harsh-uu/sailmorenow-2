@@ -1,0 +1,14 @@
+{
+  "id": "evt_inv_paid_legacy",
+  "type": "invoice.paid",
+  "api_version": "2024-06-20",
+  "data": {
+    "object": {
+      "id": "in_legacy",
+      "object": "invoice",
+      "customer": "cus_doc",
+      "subscription": "sub_legacy",
+      "hosted_invoice_url": "https://pay.stripe.com/invoice/legacy"
+    }
+  }
+}

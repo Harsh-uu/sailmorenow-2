@@ -18,26 +18,46 @@ client = AsyncIOMotorClient(os.environ["MONGO_URL"])
 db = client[os.environ["DB_NAME"]]
 
 STRIPE_API_KEY = os.environ.get("STRIPE_API_KEY", "sk_test_emergent")
+STRIPE_SECRET_KEY = os.environ.get("STRIPE_SECRET_KEY", "")
+STRIPE_MODE = os.environ.get("STRIPE_MODE", "")
 
 
 def stripe_mode() -> Dict[str, Any]:
-    """Return the currently-configured Stripe mode based on the API key
-    prefix. `test` is the Emergent-managed sandbox (sk_test_*); `live` means
-    the operator has replaced STRIPE_API_KEY with a live sk_live_* key.
-    Also exposes whether a webhook signing secret is present so the /pricing
-    UI can show a "Test mode" banner and the payments router can decide
-    whether to enforce Stripe-Signature verification."""
-    key = STRIPE_API_KEY or ""
-    if key.startswith("sk_live_"):
-        mode = "live"
-    elif key.startswith("sk_test_"):
-        mode = "test"
+    """Return the currently-configured Stripe mode. At go-live only STRIPE_MODE
+    and STRIPE_SECRET_KEY switch to live (STRIPE_API_KEY stays on the sandbox
+    key), so mode is read from STRIPE_MODE when set and only falls back to the
+    STRIPE_API_KEY prefix for preview/local where STRIPE_MODE is unset. Also
+    exposes whether a webhook signing secret is present so the /pricing UI can
+    show a 'Test mode' banner and the payments router can decide whether to
+    enforce Stripe-Signature verification."""
+    env_mode = (STRIPE_MODE or "").strip().lower()
+    if env_mode in ("live", "test"):
+        mode = env_mode
     else:
-        mode = "unknown"
+        key = STRIPE_API_KEY or ""
+        if key.startswith("sk_live_"):
+            mode = "live"
+        elif key.startswith("sk_test_"):
+            mode = "test"
+        else:
+            mode = "unknown"
     return {
         "mode": mode,
         "webhook_secret_configured": bool(os.environ.get("STRIPE_WEBHOOK_SECRET")),
     }
+
+
+# Boot assertion: in live mode the effective outgoing secret (STRIPE_SECRET_KEY,
+# else STRIPE_API_KEY) MUST be a live key, or real billing calls could hit the
+# test account. Logged loudly (not fatal) so boot is never blocked.
+if (STRIPE_MODE or "").strip().lower() == "live":
+    import logging as _lg
+    _eff_secret = STRIPE_SECRET_KEY or STRIPE_API_KEY or ""
+    if not _eff_secret.startswith("sk_live_"):
+        _lg.getLogger("smn").error(
+            "STRIPE_MODE=live but the effective Stripe secret is not a live key "
+            "(sk_live_*). Real payment calls could hit the TEST account - set a live "
+            "STRIPE_SECRET_KEY before taking live payments.")
 
 
 

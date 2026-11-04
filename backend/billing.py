@@ -32,6 +32,58 @@ def effective_tier(audience: str, tier: str) -> str:
     return "premium" if audience in ("sailor", "boat_owner") else tier
 
 
+def mask_email(email: Optional[str]) -> str:
+    """Mask an email for logs: 'doug@topmarktech.com' -> 'd***@topmarktech.com'."""
+    if not email or "@" not in email:
+        return "***"
+    local, _, domain = email.partition("@")
+    return (local[0] if local else "*") + "***@" + domain
+
+
+def _as_id(v: Any) -> Optional[str]:
+    if isinstance(v, str):
+        return v
+    if isinstance(v, dict):
+        return v.get("id")
+    return getattr(v, "id", None)
+
+
+def subscription_id_from_invoice(invoice: Dict[str, Any]) -> Optional[str]:
+    """Resolve a subscription id from an Invoice across Stripe API versions.
+
+    Legacy (<= 2024): top-level `invoice.subscription`. From 2025-03-31.basil
+    onward (basil / clover / endive) that field was removed in favour of
+    `invoice.parent.subscription_details.subscription` (guard on
+    `parent.type == "subscription_details"`), with a per-line equivalent at
+    `line.parent.subscription_item_details.subscription`. As a last resort we look
+    up the customer's most recent subscription. Returns None only when truly
+    unresolvable - callers must log and return 2xx, never drop silently."""
+    sid = _as_id(invoice.get("subscription"))
+    if sid:
+        return sid
+    parent = invoice.get("parent") or {}
+    if parent.get("type") == "subscription_details":
+        sid = _as_id((parent.get("subscription_details") or {}).get("subscription"))
+        if sid:
+            return sid
+    for line in ((invoice.get("lines") or {}).get("data") or []):
+        lp = line.get("parent") or {}
+        sid = _as_id((lp.get("subscription_item_details") or {}).get("subscription"))
+        if sid:
+            return sid
+    cust = _as_id(invoice.get("customer"))
+    if cust:
+        try:
+            subs = stripe.Subscription.list(customer=cust, status="all", limit=1).data
+            if subs:
+                logger.warning("invoice %s: subscription resolved via customer fallback",
+                               invoice.get("id"))
+                return subs[0].id
+        except Exception:
+            logger.exception("invoice %s: customer-fallback lookup failed", invoice.get("id"))
+    return None
+
+
 async def trial_settings() -> Dict[str, Any]:
     doc = await db.app_settings.find_one({"key": "billing"}) or {}
     return {

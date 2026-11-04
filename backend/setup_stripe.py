@@ -11,6 +11,7 @@ lookup_key at runtime; never hardcode price IDs.
 import os
 import sys
 import stripe
+from typing import Optional
 from dotenv import load_dotenv
 load_dotenv()
 
@@ -67,17 +68,50 @@ def ensure_price(product_id: str, lookup_key: str, amount_cents: int, recurring:
     return pr, "created"
 
 
-def main():
+# Signup promo: 100% off for 3 months. Different code per mode so a test code can
+# never be redeemed in live. setup_stripe does not otherwise create coupons.
+PROMO_CODE_FOR = {"test": "SMNTEST3FREE", "live": "SMNALPHA3FREE"}
+
+
+def current_mode() -> str:
+    m = (os.environ.get("STRIPE_MODE") or "").strip().lower()
+    if m in ("test", "live"):
+        return m
+    return "live" if (stripe.api_key or "").startswith("sk_live") else "test"
+
+
+def ensure_promo(mode: str) -> dict:
+    """Idempotent: a 100%-off, repeating-3-months coupon + a promotion code with
+    the mode's code. If the promotion code already exists it is reused as-is."""
+    code = PROMO_CODE_FOR[mode]
+    existing = stripe.PromotionCode.list(code=code, limit=1).data
+    if existing:
+        return {"code": code, "state": "unchanged", "id": existing[0].id}
+    coupon = stripe.Coupon.create(
+        percent_off=100, duration="repeating", duration_in_months=3,
+        name=f"{code} (3 months free)",
+        metadata={"managed_by": "sailmorenow"})
+    pc = stripe.PromotionCode.create(coupon=coupon.id, code=code)
+    return {"code": code, "state": "created", "id": pc.id, "coupon": coupon.id}
+
+
+def sync_catalog(stripe_key: Optional[str] = None) -> dict:
+    """Idempotently ensure the 5 products, 17 prices and the promo code exist in
+    whichever Stripe mode is live. Returns a summary dict. Safe to re-run."""
+    if stripe_key:
+        stripe.api_key = stripe_key
     if not stripe.api_key:
-        print("No STRIPE_SECRET_KEY / STRIPE_API_KEY in env"); sys.exit(1)
+        raise RuntimeError("No STRIPE_SECRET_KEY / STRIPE_API_KEY in env")
+    mode = current_mode()
     acct = stripe.Account.retrieve()
-    print(f"Stripe account {acct.id} ({'LIVE' if stripe.api_key.startswith('sk_live') else 'TEST'})")
-    products = {}
+    products: dict = {}
+    prod_ids: dict = {}
     for pid, meta in PRODUCTS.items():
         prod = get_or_create_product(pid, meta["name"])
         products[pid] = prod
-        print(f"  product {pid} -> {prod.id}")
-    n = 0
+        prod_ids[pid] = prod.id
+    created = unchanged = updated = 0
+    prices = []
     for pkg_key, pkg in SUBSCRIPTION_PACKAGES.items():
         prod = products[product_key_for(pkg_key)]
         amount = int(round(package_total(pkg) * 100))
@@ -85,9 +119,32 @@ def main():
             prod.id, pkg_key, amount, recurring_for(pkg["months"]),
             meta={"tier": pkg["tier"], "audience": pkg["audience"],
                   "months": str(pkg["months"]), "discount": str(pkg["discount"])})
-        n += 1
-        print(f"    price {pkg_key:18s} ${amount/100:7.2f} {pkg['months']:>2}mo -> {pr.id} [{state}]")
-    print(f"Done: {len(products)} products, {n} prices.")
+        if state == "created":
+            created += 1
+        elif state == "unchanged":
+            unchanged += 1
+        else:
+            updated += 1
+        prices.append({"lookup_key": pkg_key, "amount": amount, "state": state, "id": pr.id})
+    promo = ensure_promo(mode)
+    return {
+        "mode": mode, "account": acct.id,
+        "products": prod_ids,
+        "prices_created": created, "prices_unchanged": unchanged, "prices_updated": updated,
+        "prices": prices,
+        "promo_code": promo["code"], "promo_state": promo["state"],
+    }
+
+
+def main():
+    summary = sync_catalog()
+    print(f"Stripe account {summary['account']} ({summary['mode'].upper()})")
+    for pid, pid_id in summary["products"].items():
+        print(f"  product {pid} -> {pid_id}")
+    for p in summary["prices"]:
+        print(f"    price {p['lookup_key']:18s} ${p['amount']/100:7.2f} -> {p['id']} [{p['state']}]")
+    print(f"  promo {summary['promo_code']} [{summary['promo_state']}]")
+    print(f"Done: {len(summary['products'])} products, {len(summary['prices'])} prices.")
 
 
 if __name__ == "__main__":

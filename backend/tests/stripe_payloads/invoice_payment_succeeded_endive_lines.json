@@ -1,0 +1,25 @@
+{
+  "id": "evt_inv_succ_lines",
+  "type": "invoice.payment_succeeded",
+  "api_version": "2026-09-30.endive",
+  "data": {
+    "object": {
+      "id": "in_lines_only",
+      "object": "invoice",
+      "customer": "cus_doc",
+      "lines": {
+        "data": [
+          {
+            "parent": {
+              "type": "subscription_item_details",
+              "subscription_item_details": {
+                "subscription": "sub_lines",
+                "subscription_item": "si_lines"
+              }
+            }
+          }
+        ]
+      }
+    }
+  }
+}

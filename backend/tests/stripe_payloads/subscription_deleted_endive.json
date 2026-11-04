@@ -1,0 +1,19 @@
+{
+  "id": "evt_sub_deleted",
+  "type": "customer.subscription.deleted",
+  "api_version": "2026-09-30.endive",
+  "data": {
+    "object": {
+      "id": "sub_deleted",
+      "object": "subscription",
+      "customer": "cus_doc",
+      "status": "canceled",
+      "metadata": { "user_id": "user_doc" },
+      "items": {
+        "data": [
+          { "price": { "lookup_key": "sailor_premium_1" } }
+        ]
+      }
+    }
+  }
+}

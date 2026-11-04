@@ -16,6 +16,7 @@ from billing import (
     price_id_for, get_or_create_customer, user_trial_eligible, trial_settings,
     apply_subscription_entitlement, effective_tier, STRIPE_WEBHOOK_SECRET,
     promo_eligible, find_promotion_code, PROMO_MONTHS,
+    subscription_id_from_invoice, mask_email,
 )
 
 logger = logging.getLogger("smn.payments")
@@ -630,24 +631,62 @@ async def admin_set_trial(body: dict, admin=Depends(require_admin)):
     return new
 
 
+@router.post("/admin/billing/sync-catalog")
+async def admin_sync_catalog(admin=Depends(require_admin)):
+    """Re-run the idempotent Stripe catalog setup against whatever mode is live
+    (test or live, by STRIPE_MODE / key prefix): the 5 products, 17 prices, and
+    the promo code. Safe to re-run; writes to Stripe. Admin-only."""
+    import asyncio
+    from setup_stripe import sync_catalog
+    try:
+        summary = await asyncio.to_thread(sync_catalog)
+    except Exception as e:
+        logger.exception("stripe catalog sync failed")
+        raise HTTPException(status_code=502, detail=f"Catalog sync failed: {e}")
+    try:
+        from audit import log_admin_action
+        await log_admin_action(
+            admin, "sync", "billing_catalog", "billing",
+            summary=(f"Catalog sync ({summary.get('mode')}): "
+                     f"{summary.get('prices_created', 0)} created / "
+                     f"{summary.get('prices_unchanged', 0)} unchanged, "
+                     f"promo {summary.get('promo_code')} [{summary.get('promo_state')}]"),
+            meta=summary)
+    except Exception:
+        logger.exception("catalog sync audit failed")
+    return summary
+
+
 # --- Webhook: the single source of truth ---
-async def _handle_event(event: Dict[str, Any]):
+async def _handle_event(event: Dict[str, Any]) -> str:
+    """Process one event. Returns a result string used only for logging:
+    processed | ignored | unmapped | no_subscription. Raises on transient or
+    unexpected failures so the caller can return 5xx and let Stripe retry."""
     t = event["type"]
     obj = event["data"]["object"]
     if t.startswith("customer.subscription."):
-        await apply_subscription_entitlement(obj)
+        uid = await apply_subscription_entitlement(obj)
         if t == "customer.subscription.updated" and obj.get("status") == "active":
             await _maybe_welcome(obj)
-    elif t == "checkout.session.completed" and obj.get("subscription"):
+        return "processed" if uid else "unmapped"
+    elif t == "checkout.session.completed":
+        if not obj.get("subscription"):
+            return "ignored"
         sub = stripe.Subscription.retrieve(obj["subscription"])
-        await apply_subscription_entitlement(sub)
+        uid = await apply_subscription_entitlement(sub)
         await _maybe_welcome(sub)
+        return "processed" if uid else "unmapped"
     elif t == "invoice.payment_failed":
-        await _on_payment_failed(obj)
-    elif t == "invoice.paid":
-        if obj.get("subscription"):
-            sub = stripe.Subscription.retrieve(obj["subscription"])
-            await apply_subscription_entitlement(sub)
+        return await _on_payment_failed(obj)
+    elif t in ("invoice.paid", "invoice.payment_succeeded"):
+        sid = subscription_id_from_invoice(obj)
+        if not sid:
+            logger.warning("%s: no subscription resolvable on invoice %s", t, obj.get("id"))
+            return "no_subscription"
+        sub = stripe.Subscription.retrieve(sid)
+        uid = await apply_subscription_entitlement(sub)
+        return "processed" if uid else "unmapped"
+    return "ignored"
 
 
 async def _recipient(sub_or_cust) -> Optional[dict]:
@@ -672,13 +711,14 @@ async def _maybe_welcome(sub):
         logger.exception("welcome email failed")
 
 
-async def _on_payment_failed(invoice):
-    if invoice.get("subscription"):
-        sub = stripe.Subscription.retrieve(invoice["subscription"])
+async def _on_payment_failed(invoice) -> str:
+    sid = subscription_id_from_invoice(invoice)
+    if sid:
+        sub = stripe.Subscription.retrieve(sid)
         await apply_subscription_entitlement(sub)
     u = await _recipient(invoice)
     if not u:
-        return
+        return "processed" if sid else "no_subscription"
     try:
         from mailer import send_email, billing_payment_failed_email_html
         await send_email(recipient_email=u["email"], subject="Your Sail More Now payment didn't go through",
@@ -686,7 +726,8 @@ async def _on_payment_failed(invoice):
                              name=u.get("name"), tier_label=tier_label(u.get("subscription_tier")),
                              update_url=invoice.get("hosted_invoice_url")))
     except Exception:
-        logger.exception("payment-failed email failed")
+        logger.exception("payment-failed email failed for %s", mask_email(u.get("email")))
+    return "processed"
 
 
 @router.post("/stripe/webhook")
@@ -699,18 +740,32 @@ async def stripe_webhook(request: Request):
     except Exception as e:
         logger.warning("stripe webhook signature/parse failed: %s", e)
         return JSONResponse({"received": False}, status_code=400)
-    # Idempotency: record event id; skip if seen.
+    eid, etype = event["id"], event["type"]
+    # Idempotency: record the event id; a duplicate delivery is a no-op.
+    inserted = False
     try:
         res = await db.stripe_events.update_one(
-            {"id": event["id"]},
-            {"$setOnInsert": {"id": event["id"], "type": event["type"],
+            {"id": eid},
+            {"$setOnInsert": {"id": eid, "type": etype,
                               "at": datetime.now(timezone.utc).isoformat()}}, upsert=True)
         if res.matched_count:
+            logger.info("stripe webhook id=%s type=%s result=duplicate", eid, etype)
             return {"received": True, "duplicate": True}
+        inserted = True
     except Exception:
-        pass
+        logger.exception("stripe webhook id=%s type=%s dedup-store failed", eid, etype)
+    # Permanent/known conditions (unknown type, unmapped customer, no resolvable
+    # subscription) return 2xx with a warning. Transient or unexpected failures raise
+    # here -> 500 so Stripe retries; we drop the dedup marker so the retry reprocesses.
     try:
-        await _handle_event(event)
+        result = await _handle_event(event)
     except Exception:
-        logger.exception("stripe webhook handling failed for %s", event.get("type"))
-    return {"received": True}
+        logger.exception("stripe webhook id=%s type=%s result=failed", eid, etype)
+        if inserted:
+            try:
+                await db.stripe_events.delete_one({"id": eid})
+            except Exception:
+                logger.exception("stripe webhook id=%s: could not clear dedup marker", eid)
+        return JSONResponse({"received": False, "error": "processing_failed"}, status_code=500)
+    logger.info("stripe webhook id=%s type=%s result=%s", eid, etype, result)
+    return {"received": True, "result": result}
